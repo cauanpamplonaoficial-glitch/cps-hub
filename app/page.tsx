@@ -5,7 +5,7 @@ import { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { Activity, Boxes, CircleDollarSign, LogOut, Package, Plus, RefreshCw, Search, ShoppingBag, Truck, Users, Wallet, Database } from "lucide-react";
 
-type ModuleName = "products" | "customers" | "suppliers" | "sales" | "purchases" | "inventory_movements" | "expenses" | "v1_archive";
+type ModuleName = "products" | "customers" | "suppliers" | "sales" | "purchases" | "inventory_movements" | "expenses" | "v1_archive" | "conversations" | "history";
 type RowData = Record<string, unknown> & { id: string; created_at?: string };
 const modules: { id: ModuleName; label: string; icon: typeof Package }[] = [
   { id: "products", label: "Produtos", icon: Package },
@@ -15,7 +15,9 @@ const modules: { id: ModuleName; label: string; icon: typeof Package }[] = [
   { id: "purchases", label: "Compras", icon: Boxes },
   { id: "inventory_movements", label: "Movimentações", icon: Activity },
   { id: "expenses", label: "Despesas", icon: Wallet },
-  { id: "v1_archive", label: "Dados migrados do V1", icon: Database },
+  { id: "conversations", label: "Conversas importadas", icon: Users },
+  { id: "history", label: "Histórico de atividades", icon: Activity },
+  { id: "v1_archive", label: "Outros dados importados", icon: Database },
 ];
 const money = (v: unknown) => Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const styles = {
@@ -36,6 +38,9 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<Record<string, string>>({});
+  const [lookupProducts, setLookupProducts] = useState<RowData[]>([]);
+  const [lookupCustomers, setLookupCustomers] = useState<RowData[]>([]);
+  const [lookupSuppliers, setLookupSuppliers] = useState<RowData[]>([]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setReady(true); });
@@ -46,10 +51,22 @@ export default function Home() {
   const loadRows = useCallback(async () => {
     if (!session) return;
     setBusy(true); setNotice("");
-    const orderColumn = module === "sales" ? "sold_at" : module === "purchases" ? "ordered_at" : module === "v1_archive" ? "imported_at" : "created_at";
-    const { data, error } = await supabase.from(module).select("*").order(orderColumn, { ascending: false }).limit(200);
+    let query = supabase.from(["conversations","history"].includes(module) ? "v1_archive" : module).select("*");
+    if (module === "conversations") query = query.in("entity_name", ["InboxConversation", "InboxMessage", "ChatMessage"]);
+    if (module === "history") query = query.eq("entity_name", "AuditLog");
+    if (module === "v1_archive") query = query.not("entity_name", "like", "Consorcio%");
+    const orderColumn = module === "sales" ? "sold_at" : module === "purchases" ? "ordered_at" : ["v1_archive","conversations","history"].includes(module) ? "imported_at" : "created_at";
+    const { data, error } = await query.order(orderColumn, { ascending: false }).limit(200);
     if (error) { setRows([]); setNotice(error.message); }
     else setRows((data || []) as RowData[]);
+    if (module === "sales" || module === "purchases") {
+      const [p,c,sup] = await Promise.all([
+        supabase.from("products").select("id,name,stock_quantity,sale_price,cost_price").eq("active",true).order("name").limit(500),
+        supabase.from("customers").select("id,name").order("name").limit(500),
+        supabase.from("suppliers").select("id,name").order("name").limit(500)
+      ]);
+      setLookupProducts((p.data || []) as RowData[]); setLookupCustomers((c.data || []) as RowData[]); setLookupSuppliers((sup.data || []) as RowData[]);
+    }
     setBusy(false);
   }, [module, session]);
 
@@ -83,7 +100,18 @@ export default function Home() {
       { key: "email", label: "E-mail", type: "email" }, { key: "document_number", label: "CNPJ/CPF" },
       { key: "notes", label: "Observações" },
     ];
-    if (module === "v1_archive") return [];
+    if (["v1_archive","conversations","history"].includes(module)) return [];
+    if (module === "sales") return [
+      { key: "customer_id", label: "Cliente (opcional)" }, { key: "product_id", label: "Produto", required: true },
+      { key: "quantity", label: "Quantidade", type: "number", required: true }, { key: "unit_price", label: "Preço unitário (R$)", type: "number", required: true },
+      { key: "channel", label: "Canal de venda" }, { key: "discount", label: "Desconto (R$)", type: "number" }, { key: "fees", label: "Taxas (R$)", type: "number" },
+      { key: "shipping_cost", label: "Frete (R$)", type: "number" }, { key: "notes", label: "Observações" }
+    ];
+    if (module === "purchases") return [
+      { key: "supplier_id", label: "Fornecedor (opcional)" }, { key: "product_id", label: "Produto", required: true },
+      { key: "quantity", label: "Quantidade", type: "number", required: true }, { key: "unit_cost", label: "Custo unitário (R$)", type: "number", required: true },
+      { key: "notes", label: "Observações" }
+    ];
     if (module === "expenses") return [
       { key: "description", label: "Descrição da despesa", required: true }, { key: "category", label: "Categoria" },
       { key: "amount", label: "Valor (R$)", type: "number", required: true }, { key: "due_date", label: "Vencimento", type: "date" },
@@ -101,7 +129,14 @@ export default function Home() {
       if (value !== "") payload[field.key] = field.type === "number" ? Number(value) : value;
     }
     if (module === "expenses" && !payload.status) payload.status = "pending";
-    const { error } = await supabase.from(module).insert(payload);
+    let error: { message: string } | null = null;
+    if (module === "sales") {
+      const { error: rpcError } = await supabase.rpc("create_sale", { p_customer_id: payload.customer_id || null, p_channel: payload.channel || "Manual", p_notes: payload.notes || null, p_discount: Number(payload.discount || 0), p_fees: Number(payload.fees || 0), p_shipping_cost: Number(payload.shipping_cost || 0), p_items: [{ product_id: payload.product_id, quantity: Number(payload.quantity), unit_price: Number(payload.unit_price) }] });
+      error = rpcError;
+    } else if (module === "purchases") {
+      const { error: rpcError } = await supabase.rpc("create_purchase", { p_supplier_id: payload.supplier_id || null, p_notes: payload.notes || null, p_items: [{ product_id: payload.product_id, quantity: Number(payload.quantity), unit_cost: Number(payload.unit_cost) }] });
+      error = rpcError;
+    } else { const result = await supabase.from(module).insert(payload); error = result.error; }
     setBusy(false);
     if (error) { setNotice(error.message); return; }
     setNotice("Registro salvo com sucesso."); setShowForm(false); setForm({});
@@ -138,7 +173,7 @@ export default function Home() {
     if (module === "products") return [row.name, row.sku || "—", row.category || "—", money(row.cost_price), money(row.sale_price), String(row.stock_quantity ?? 0)];
     if (module === "customers") return [row.name, row.phone || "—", row.email || "—", row.notes || "—"];
     if (module === "suppliers") return [row.name, row.phone || "—", row.email || "—", row.document_number || "—"];
-    if (module === "v1_archive") return [row.entity_name, row.legacy_id, JSON.stringify(row.payload || {}).slice(0,220), row.imported_at ? new Date(String(row.imported_at)).toLocaleString("pt-BR") : "—"];
+    if (["v1_archive","conversations","history"].includes(module)) return [row.entity_name, row.legacy_id, JSON.stringify(row.payload || {}).slice(0,220), row.imported_at ? new Date(String(row.imported_at)).toLocaleString("pt-BR") : "—"];
     if (module === "expenses") return [row.description, row.category || "—", money(row.amount), row.due_date || "—", row.status || "pending"];
     if (module === "sales") return [row.order_number || row.id.slice(0,8), row.channel || "Manual", row.status || "pending", new Date(String(row.sold_at)).toLocaleDateString("pt-BR"), money(row.subtotal)];
     if (module === "purchases") return [row.supplier_id || "Sem fornecedor", row.status || "pending", new Date(String(row.ordered_at)).toLocaleDateString("pt-BR"), money(row.total)];
@@ -148,7 +183,7 @@ export default function Home() {
     module === "customers" ? ["Cliente","Telefone","E-mail","Observações"] :
     module === "suppliers" ? ["Fornecedor","Telefone","E-mail","Documento"] :
     module === "expenses" ? ["Despesa","Categoria","Valor","Vencimento","Status"] :
-    module === "v1_archive" ? ["Tipo","ID original","Dados preservados (resumo)","Importado em"] :
+    ["v1_archive","conversations","history"].includes(module) ? ["Tipo","ID original","Dados preservados (resumo)","Importado em"] :
     module === "sales" ? ["Pedido","Canal","Status","Data","Subtotal"] :
     module === "purchases" ? ["Fornecedor","Status","Data","Total"] : ["Movimento","Produto","Quantidade","Observações","Data"];
 
@@ -169,10 +204,10 @@ export default function Home() {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button onClick={()=>void loadRows()} style={{ ...styles.button, background: "#22242b", color: "#eee" }}><RefreshCw size={15}/> Atualizar</button>{fieldsFor().length>0&&<button onClick={()=>{setShowForm(!showForm);setForm({});}} style={styles.button}><Plus size={16}/> Novo registro</button>}</div>
         </div>
         {notice && <div role="status" style={{ padding: 12, marginTop: 18, borderRadius: 8, border: "1px solid #51451f", background: "#211e13", color: "#e9d68e", fontSize: 12 }}>{notice}</div>}
-        {showForm && <form onSubmit={saveRow} style={{ marginTop: 20, padding: 18, border: "1px solid #383a42", borderRadius: 12, background: "#17191e" }}><h2 style={{ fontSize: 15, marginTop: 0 }}>Novo registro — {title}</h2><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 12 }}>{fieldsFor().map(field=><label key={field.key} style={{ display: "grid", gap: 6, color: "#b8bac3", fontSize: 11 }}>{field.label}<input required={field.required} min={field.type==="number" ? "0" : undefined} step={field.type==="number" ? "0.01" : undefined} type={field.type || "text"} value={form[field.key] || ""} onChange={e=>setForm(old=>({...old,[field.key]:e.target.value}))} style={styles.input}/></label>)}</div><div style={{ display: "flex", gap: 8, marginTop: 15 }}><button disabled={busy} type="submit" style={styles.button}>{busy ? "Salvando…" : "Salvar registro"}</button><button type="button" onClick={()=>setShowForm(false)} style={{ ...styles.button, background: "#292b32", color: "#eee" }}>Cancelar</button></div></form>}
+        {showForm && <form onSubmit={saveRow} style={{ marginTop: 20, padding: 18, border: "1px solid #383a42", borderRadius: 12, background: "#17191e" }}><h2 style={{ fontSize: 15, marginTop: 0 }}>Novo registro — {title}</h2>{(module === "sales" || module === "purchases") && <p style={{ color: "#d9c777", fontSize: 11 }}>A operação e o movimento de estoque são salvos juntos. Compras entram no estoque imediatamente; vendas validam saldo disponível.</p>}<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 12 }}>{fieldsFor().map(field=><label key={field.key} style={{ display: "grid", gap: 6, color: "#b8bac3", fontSize: 11 }}>{field.label}{field.key === "product_id" ? <select required value={form[field.key] || ""} onChange={e=>{const selected=lookupProducts.find(p=>p.id===e.target.value);setForm(old=>({...old,[field.key]:e.target.value,...(module==="sales"&&selected?{unit_price:String(selected.sale_price ?? 0)}:{}),...(module==="purchases"&&selected?{unit_cost:String(selected.cost_price ?? 0)}:{})}));}} style={styles.input}><option value="">Selecione um produto</option>{lookupProducts.map(p=><option key={String(p.id)} value={String(p.id)}>{String(p.name)} · estoque {String(p.stock_quantity ?? 0)}</option>)}</select> : field.key === "customer_id" || field.key === "supplier_id" ? <select value={form[field.key] || ""} onChange={e=>setForm(old=>({...old,[field.key]:e.target.value}))} style={styles.input}><option value="">Sem seleção</option>{(field.key==="customer_id"?lookupCustomers:lookupSuppliers).map(p=><option key={String(p.id)} value={String(p.id)}>{String(p.name)}</option>)}</select> : <input required={field.required} min={field.type==="number" ? "0" : undefined} step={field.type==="number" ? "0.01" : undefined} type={field.type || "text"} value={form[field.key] || ""} onChange={e=>setForm(old=>({...old,[field.key]:e.target.value}))} style={styles.input}/>}</label>)}</div><div style={{ display: "flex", gap: 8, marginTop: 15 }}><button disabled={busy} type="submit" style={styles.button}>{busy ? "Salvando…" : "Salvar registro"}</button><button type="button" onClick={()=>setShowForm(false)} style={{ ...styles.button, background: "#292b32", color: "#eee" }}>Cancelar</button></div></form>}
         <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "22px 0 12px", flexWrap: "wrap" }}><div style={{ display: "flex", alignItems: "center", gap: 8, flex: "1 1 230px", padding: "9px 11px", background: "#17191e", border: "1px solid #30323a", borderRadius: 8, color: "#888b95" }}><Search size={15}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar registros…" style={{ flex: 1, minWidth: 0, background: "transparent", border: 0, outline: 0, color: "#f3f3f5" }}/></div><span style={{ fontSize: 11, color: "#9295a0" }}>{visibleRows.length} registro(s)</span></div>
         <div style={{ border: "1px solid #292b32", borderRadius: 11, overflowX: "auto", background: "#14161b" }}><table style={{ borderCollapse: "collapse", width: "100%", minWidth: 620, textAlign: "left" }}><thead><tr>{columns.map(c=><th key={c} style={{ padding: 13, fontSize: 10, color: "#888b95", background: "#1b1d23", borderBottom: "1px solid #30323a" }}>{c}</th>)}<th style={{ padding: 13, fontSize: 10, color: "#888b95", background: "#1b1d23" }}>Ações</th></tr></thead><tbody>{visibleRows.map(row=><tr key={row.id}>{display(row).map((v,i)=><td key={i} style={{ padding: 13, fontSize: 11, color: "#d2d3d9", borderBottom: "1px solid #25272e" }}>{String(v ?? "—")}</td>)}<td style={{ padding: 10, borderBottom: "1px solid #25272e" }}>{["products","customers","suppliers","expenses"].includes(module)&&<button onClick={()=>void deleteRow(row.id)} style={{ border: "1px solid #55333a", borderRadius: 6, padding: "6px 8px", background: "#2b1c20", color: "#f0aab3", cursor: "pointer" }}>Excluir</button>}</td></tr>)}</tbody></table>{!busy&&visibleRows.length===0&&<div style={{ padding: 34, textAlign: "center", color: "#888b95", fontSize: 12 }}>Nenhum registro encontrado. Você pode adicionar um novo registro nos módulos disponíveis.</div>}{busy&&<div style={{ padding: 20, textAlign: "center", color: "#b8bac3", fontSize: 12 }}>Carregando…</div>}</div>
-        <p style={{ color: "#696d78", fontSize: 10, marginTop: 18, lineHeight: 1.6 }}>CPS Hub V2 · Dados protegidos por autenticação e RLS. O arquivo de migração preserva o conteúdo original do V1; confira os dados antes de operar estoque e financeiro.</p>
+        <p style={{ color: "#696d78", fontSize: 10, marginTop: 18, lineHeight: 1.6 }}>CPS Hub V2 · Dados protegidos por autenticação e RLS. Vendas e compras atualizam estoque em transação única. Dados de consórcio foram removidos da interface.</p>
       </section>
     </div>
   </main>;
