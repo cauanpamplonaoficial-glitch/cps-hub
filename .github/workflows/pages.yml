@@ -1,4 +1,4 @@
-name: Deploy CPS Hub V2 to GitHub Pages
+name: Deploy CPS Hub V2 to GitHub Pages # build 2026-10-13 V1 archive UI
 
 on:
   push:
