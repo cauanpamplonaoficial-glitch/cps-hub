@@ -6,3 +6,128 @@
 @media(max-width:950px){.sidebar{width:225px}.main{margin-left:225px}.page-head{align-items:flex-start;flex-direction:column}.head-actions{max-width:none;justify-content:flex-start}.kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.content-grid{grid-template-columns:1fr}.channel-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:22px}.bottom-grid{grid-template-columns:1fr}.filterbar{gap:9px}.filter-title{border-right:0}.module-banner{align-items:flex-start;flex-wrap:wrap}.module-banner .button{margin-left:64px}}
 @media(max-width:700px){.sidebar{width:270px;transform:translateX(-105%);transition:transform .2s ease;box-shadow:20px 0 60px #0007}.sidebar.sidebar-open{transform:translateX(0)}.mobile-scrim{display:block;position:fixed;inset:0;background:#0009;border:0;z-index:19}.mobile-menu,.mobile-close{display:grid}.mobile-close{margin-left:auto}.main{margin-left:0}.topbar{height:59px;padding:0 14px}.breadcrumb{gap:7px}.breadcrumb>span:first-of-type{display:none}.global-search{width:min(42vw,190px);padding:7px}.top-actions{gap:8px}.top-avatar{width:29px;height:29px}.page-wrap{padding:22px 14px 16px}.page-head{gap:16px;margin-bottom:18px}h1{font-size:26px}.head-actions{gap:7px}.head-actions .button{padding:8px 10px;font-size:10px}.demo-pill{padding:8px;font-size:8px}.demo-notice{align-items:flex-start;padding:10px}.demo-notice p{line-height:1.55}.filterbar{padding:10px;gap:9px}.filter-title{width:100%;padding-bottom:7px;border-bottom:1px solid #292b32}.filterbar label{flex:1;align-items:flex-start;flex-direction:column;gap:5px;min-width:125px}.filterbar select{width:100%;min-width:0}.filter-toggle{flex:1;justify-content:center}.advanced-filters{align-items:flex-start}.advanced-filters label{align-items:flex-start;flex-direction:column;flex:1;min-width:125px}.advanced-filters input,.advanced-filters select{width:100%;min-width:0}.kpi-grid{gap:9px}.kpi-card{padding:12px}.kpi-title{align-items:flex-start;font-size:10px}.kpi-icon{width:29px;height:29px}.kpi-value{font-size:clamp(17px,4.8vw,22px);margin:14px 0 9px}.kpi-change{font-size:9px;line-height:1.4}.content-grid,.bottom-grid{gap:10px;margin-top:10px}.panel{padding:13px}.panel-head{margin-bottom:14px}.panel-head h2{font-size:12px}.panel-head p{font-size:9px}.chart-legend{font-size:9px}.chart-y-labels{width:49px;font-size:8px}.bar-chart{min-height:195px}.chart-plot{min-height:177px}.bar-columns{gap:2px}.bars{width:80%;gap:2px}.bar-date{font-size:8px}.channel-list{grid-template-columns:1fr;gap:14px}.sales-panel{padding-bottom:0}.table-bottom{padding:10px 0}.quick-links{grid-template-columns:1fr}.footer{flex-wrap:wrap;justify-content:flex-start;gap:7px 15px;padding-top:18px}.module-stats{grid-template-columns:1fr}.module-banner{padding:14px;gap:10px}.module-banner-icon{height:40px;width:40px}.module-banner h2{font-size:17px}.module-banner p{line-height:1.6}.module-banner .button{margin-left:0}.module-stat-value{font-size:22px}.toast{right:12px;bottom:12px}.summary-total strong{font-size:15px}}
 @media(max-width:390px){.global-search{width:135px}.notification-btn{display:none}.head-actions .demo-pill{order:3}.page-head h1{font-size:24px}.kpi-grid{gap:7px}.kpi-card{padding:10px}.kpi-value{font-size:17px}.kpi-title{font-size:9px}.chart-y-labels{width:42px}.channel-label{font-size:8px}}
+
+/* =========================================================
+   CPS HUB V2 — PREMIUM DESIGN SYSTEM
+   Shared palette, surfaces, focus states and motion.
+   ========================================================= */
+:root {
+  color-scheme: light;
+  --cps-bg: #f3f5fa;
+  --cps-surface: #ffffff;
+  --cps-surface-raised: #ffffff;
+  --cps-surface-muted: #eaf0f7;
+  --cps-text: #20283a;
+  --cps-text-secondary: #596579;
+  --cps-text-muted: #758198;
+  --cps-border: #dce3ef;
+  --cps-border-strong: #c4cfdf;
+  --cps-accent: #f0ca58;
+  --cps-accent-hover: #e2b83d;
+  --cps-accent-text: #24200f;
+  --cps-success: #16845b;
+  --cps-danger: #bd3548;
+  --cps-shadow-card: 0 2px 5px rgb(31 45 75 / 3%), 0 12px 32px rgb(31 45 75 / 5%);
+  --cps-shadow-hover: 0 12px 30px rgb(31 45 75 / 10%);
+  --cps-radius-card: 16px;
+  --cps-radius-control: 10px;
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --cps-bg: #0b0e14;
+  --cps-surface: #141a26;
+  --cps-surface-raised: #192131;
+  --cps-surface-muted: #202a3b;
+  --cps-text: #f4f6fc;
+  --cps-text-secondary: #a6b1c3;
+  --cps-text-muted: #8795ad;
+  --cps-border: #2b3548;
+  --cps-border-strong: #3b4961;
+  --cps-accent: #f0ca58;
+  --cps-accent-hover: #ffdc79;
+  --cps-accent-text: #24200f;
+  --cps-success: #54d6a0;
+  --cps-danger: #ff8997;
+  --cps-shadow-card: 0 2px 8px rgb(0 0 0 / 15%), 0 12px 32px rgb(0 0 0 / 12%);
+  --cps-shadow-hover: 0 14px 36px rgb(0 0 0 / 28%), 0 0 0 1px rgb(240 202 88 / 10%);
+}
+@keyframes cps-premium-enter {
+  from { opacity: 0; transform: translateY(9px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+[data-theme] { transition: background-color 220ms ease, color 220ms ease, border-color 220ms ease; }
+[data-theme] header, [data-theme] aside, [data-theme] section { transition: background-color 220ms ease, color 220ms ease, border-color 220ms ease; }
+main[data-theme] { background: var(--cps-bg) !important; color: var(--cps-text) !important; }
+main[data-theme] header, main[data-theme] aside { background: var(--cps-surface) !important; color: var(--cps-text) !important; border-color: var(--cps-border) !important; }
+main[data-theme] section { background: var(--cps-bg) !important; color: var(--cps-text) !important; }
+main[data-theme="light"] section { background: radial-gradient(ellipse at 88% 0%, #fff9e9 0%, var(--cps-bg) 45%) !important; }
+main[data-theme] section > div { animation: cps-premium-enter 340ms ease both; }
+main[data-theme] section div[style*="borderRadius: 12"], main[data-theme] section div[style*="borderRadius: 16"] {
+  border-radius: var(--cps-radius-card) !important;
+  transition: background-color 220ms ease, border-color 220ms ease, box-shadow 220ms ease, transform 180ms ease;
+}
+main[data-theme="light"] section div[style*="background: #17191e"],
+main[data-theme="light"] section div[style*="background: #14161b"],
+main[data-theme="light"] section div[style*="background: #1b1d23"],
+main[data-theme="light"] section div[style*="background: #15171c"],
+main[data-theme="light"] section div[style*="background: #25272e"],
+main[data-theme="light"] section div[style*="background: #22242b"],
+main[data-theme="light"] section div[style*="background: #292b32"] {
+  background: var(--cps-surface) !important;
+  color: var(--cps-text) !important;
+  border-color: var(--cps-border) !important;
+  box-shadow: var(--cps-shadow-card) !important;
+}
+main[data-theme="light"] section div[style*="background: radial-gradient"],
+main[data-theme="light"] section div[style*="background:radial-gradient"] {
+  background: linear-gradient(125deg, #fff8df, #fff 76%) !important;
+  color: var(--cps-text) !important;
+  border-color: #eadca4 !important;
+}
+main[data-theme="light"] section [style*="color: #f3f3f5"],
+main[data-theme="light"] section [style*="color: #f5f5f7"],
+main[data-theme="light"] section [style*="color: #eee"],
+main[data-theme="light"] section [style*="color: #d2d3d9"],
+main[data-theme="light"] section [style*="color: #d3d4da"],
+main[data-theme="light"] section [style*="color: #b7b9c2"],
+main[data-theme="light"] section [style*="color: #b8bac3"],
+main[data-theme="light"] section [style*="color: #a2a4ad"],
+main[data-theme="light"] section [style*="color: #9699a3"],
+main[data-theme="light"] section [style*="color: #9295a0"],
+main[data-theme="light"] section [style*="color: #888b95"],
+main[data-theme="light"] section [style*="color: #777b86"],
+main[data-theme="light"] section [style*="color: #696d78"] { color: var(--cps-text-secondary) !important; }
+main[data-theme="light"] section h1, main[data-theme="light"] section h2, main[data-theme="light"] section h3,
+main[data-theme="light"] section strong, main[data-theme="light"] section td { color: var(--cps-text) !important; }
+main[data-theme="light"] section p, main[data-theme="light"] section label { color: var(--cps-text-secondary) !important; }
+main[data-theme] section input, main[data-theme] section select, main[data-theme] section textarea {
+  background: var(--cps-surface) !important; color: var(--cps-text) !important;
+  border: 1px solid var(--cps-border-strong) !important; border-radius: var(--cps-radius-control);
+}
+main[data-theme] section input::placeholder, main[data-theme] section textarea::placeholder { color: var(--cps-text-muted) !important; opacity: 1; }
+main[data-theme] section table { width: 100%; background: var(--cps-surface) !important; color: var(--cps-text) !important; border-collapse: collapse; }
+main[data-theme] section th { background: var(--cps-surface-muted) !important; color: var(--cps-text-secondary) !important; }
+main[data-theme] section td { background: var(--cps-surface) !important; color: var(--cps-text) !important; border-color: var(--cps-border) !important; }
+main[data-theme] section button { transition: transform 180ms ease, box-shadow 180ms ease, background-color 220ms ease, color 220ms ease; }
+main[data-theme] section button:hover { transform: translateY(-1px); }
+main[data-theme="light"] aside button { color: var(--cps-text-secondary) !important; }
+main[data-theme="light"] aside button[style*="background: #292617"],
+main[data-theme="light"] aside button[style*="background: #2b2718"],
+main[data-theme="light"] aside button[style*="background: rgb(43, 39, 24)"] {
+  background: #fff3c7 !important; color: #674d00 !important; border-color: #eadca4 !important;
+}
+main[data-theme="dark"] section div[style*="borderRadius: 12"],
+main[data-theme="dark"] section div[style*="borderRadius: 16"] { box-shadow: var(--cps-shadow-card); }
+main[data-theme="light"] section div[style*="borderRadius: 12"],
+main[data-theme="light"] section div[style*="borderRadius: 16"] { box-shadow: var(--cps-shadow-card); }
+main[data-theme] section ::selection { background: var(--cps-accent); color: var(--cps-accent-text); }
+@media (prefers-reduced-motion: reduce) {
+  [data-theme], [data-theme] *, [data-theme] *::before, [data-theme] *::after {
+    animation-duration: .01ms !important; animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important; scroll-behavior: auto !important;
+  }
+}
+@media (max-width: 760px) {
+  main[data-theme] > div { grid-template-columns: 1fr !important; }
+  main[data-theme] aside { position: relative !important; border-right: 0 !important; border-bottom: 1px solid var(--cps-border) !important; }
+}
