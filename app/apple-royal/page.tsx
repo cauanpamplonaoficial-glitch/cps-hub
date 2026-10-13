@@ -34,7 +34,67 @@ export default function AppleRoyalPage(){
  if(tab==="warranty")return [{key:"sale_id",label:"Venda relacionada",options:["",...saleRows.map(x=>x.id)]},{key:"issue",label:"Problema relatado",required:true},{key:"warranty_until",label:"Garantia até",type:"date"},{key:"responsible_party",label:"Responsável",options:["CPS","Apple Royal","A definir"]},{key:"status",label:"Situação",options:["open","in_progress","waiting_partner","resolved","closed"]},{key:"resolution",label:"Solução"},{key:"notes",label:"Observações"}];
  return [{key:"related_type",label:"Tipo relacionado",required:true},{key:"title",label:"Título do documento",required:true},{key:"document_url",label:"Link do documento"},{key:"reference",label:"Referência"},{key:"notes",label:"Observações"}]
  };
- async function save(e:FormEvent){e.preventDefault();if(!session)return;setBusy(true);setNotice("");const payload:any={owner_id:session.user.id};for(const x of fields()){const v=f[x.key]||"";if(v!==""){if(x.type==="number")payload[x.key]=Number(v);else if(x.key==="photo_urls")payload[x.key]=v.split(",").map((s:string)=>s.trim()).filter(Boolean);else if(x.key==="customer_confirmed")payload[x.key]=v==="true";else payload[x.key]=v}}if(tab==="devices"&& !payload.status)payload.status="available";const {data:inserted,error}=await supabase.from(tables[tab as keyof typeof tables]).insert(payload).select("id").single();if(error){setBusy(false);setNotice(error.message);return}if(tab==="sales"&&payload.device_id){const {error:deviceError}=await supabase.from("apple_royal_devices").update({status:"sold",updated_at:new Date().toISOString()}).eq("id",payload.device_id);if(deviceError){setBusy(false);setNotice("Venda registrada, mas não foi possível atualizar a disponibilidade do aparelho: "+deviceError.message);await load();return}}if(tab==="reservations"&&payload.device_id&&payload.status!=="cancelled"){const {error:deviceError}=await supabase.from("apple_royal_devices").update({status:"reserved",updated_at:new Date().toISOString()}).eq("id",payload.device_id).eq("status","available");if(deviceError){setBusy(false);setNotice("Reserva registrada, mas confira a disponibilidade do aparelho: "+deviceError.message);await load();return}}if(tab==="finance"&&payload.status==="paid"&&inserted?.id){payload.paid_at=payload.paid_at||new Date().toISOString();await supabase.from("apple_royal_remittances").update({paid_at:payload.paid_at}).eq("id",inserted.id)}setBusy(false);setNotice("Registro salvo.");setShow(false);setF({});await load()}
+ async function save(e:FormEvent){
+  e.preventDefault();
+  if(!session)return;
+  setBusy(true);setNotice("");
+  const defs=fields();
+  const payload:any={owner_id:session.user.id};
+  for(const x of defs){
+    const v=f[x.key]||"";
+    if(v!==""){
+      if(x.type==="number")payload[x.key]=Number(v);
+      else if(x.key==="photo_urls")payload[x.key]=v.split(",").map((s:string)=>s.trim()).filter(Boolean);
+      else if(x.key==="customer_confirmed")payload[x.key]=v==="true";
+      else payload[x.key]=v;
+    }
+  }
+  let error:any=null;
+  let insertedId:string|null=null;
+  if(tab==="devices"){
+    if(!payload.status)payload.status="available";
+    const result=await supabase.from("apple_royal_devices").insert(payload).select("id").single();
+    error=result.error;insertedId=result.data?.id||null;
+  }else if(tab==="reservations"){
+    const {data,error:rpcError}=await supabase.rpc("apple_royal_create_reservation",{
+      p_device_id:payload.device_id||null,
+      p_customer_name:payload.customer_name,
+      p_customer_phone:payload.customer_phone||null,
+      p_desired_model:payload.desired_model||null,
+      p_agreed_price:Number(payload.agreed_price||0),
+      p_deposit_amount:Number(payload.deposit_amount||0),
+      p_expires_at:payload.expires_at||null,
+      p_status:payload.status||"reserved",
+      p_notes:payload.notes||null
+    });
+    error=rpcError;insertedId=typeof data==="string"?data:null;
+  }else if(tab==="sales"){
+    const {data,error:rpcError}=await supabase.rpc("apple_royal_create_sale",{
+      p_device_id:payload.device_id||null,
+      p_reservation_id:payload.reservation_id||null,
+      p_customer_name:payload.customer_name,
+      p_customer_phone:payload.customer_phone||null,
+      p_model_snapshot:payload.model_snapshot,
+      p_sale_price:Number(payload.sale_price||0),
+      p_partner_amount_due:Number(payload.partner_amount_due||0),
+      p_additional_costs:Number(payload.additional_costs||0),
+      p_amount_received:Number(payload.amount_received||0),
+      p_payment_status:payload.payment_status||"pending",
+      p_status:payload.status||"confirmed",
+      p_notes:payload.notes||null
+    });
+    error=rpcError;insertedId=typeof data==="string"?data:null;
+  }else{
+    if(tab==="finance"&&payload.status==="paid"&&!payload.paid_at)payload.paid_at=new Date().toISOString();
+    const result=await supabase.from(tables[tab as keyof typeof tables]).insert(payload).select("id").single();
+    error=result.error;insertedId=result.data?.id||null;
+  }
+  setBusy(false);
+  if(error){setNotice(error.message||"Não foi possível salvar o registro.");return;}
+  setNotice("Registro salvo com sucesso.");
+  setShow(false);setF({});
+  await load();
+ }
  const title=nav.find(n=>n.id===tab)?.label||"Apple Royal";
  if(!ready)return <main style={{background:"#0b0c0f",color:"white",minHeight:"100vh",padding:40}}>Carregando…</main>;
  if(!session)return <main style={{background:"#0b0c0f",color:"white",minHeight:"100vh",display:"grid",placeItems:"center"}}><div style={{maxWidth:440,padding:28,border:"1px solid #292b32",borderRadius:16,background:"#14161b"}}><h1>Apple Royal</h1><p>Entre no CPS Hub V2 para acessar o módulo privado.</p><button style={button} onClick={()=>window.location.assign(new URL("../", window.location.href).toString())}>Ir para login</button></div></main>;
