@@ -1,31 +1,44 @@
-# CPS Hub V2 — protótipo independente
+# CPS Hub V2 — aplicação independente
 
-Protótipo visual em HTML, CSS e JavaScript puro, fora do Base44.
+Aplicação em Next.js com TypeScript, React e CSS próprio. O desenvolvimento visual está separado do sistema de produção e usa exclusivamente dados fictícios.
 
-## Abrir localmente
+## Rodar localmente
 
-1. Baixe ou clone este repositório.
-2. Abra `index.html` no navegador. Não precisa instalar dependências nem configurar servidor.
+Requisitos: Node.js 22 ou superior.
 
-## O que está implementado
+```bash
+npm install
+npm run dev
+```
 
-- Dashboard financeiro com faturamento, lucro estimado, vendas e margem.
-- Filtros por período, canal e datas.
-- Gráfico de faturamento e lucro.
-- Resumo de custos e taxas.
+Abra http://localhost:3000.
+
+## O que existe nesta versão visual
+
+- Dashboard com faturamento, lucro estimado, ticket médio e margem.
+- Gráfico de faturamento e lucro por dia.
+- Faturamento agrupado por canal.
+- Filtros por período, canal, datas personalizadas, status e busca.
 - Tabela de vendas e exportação CSV.
-- Layout responsivo para computador e celular.
+- Navegação visual entre Dashboard, Relatórios, Vendas, Estoque, Compras, Clientes, Fornecedores, Financeiro, Canais, Metas, Integrações e Configurações.
+- Layout responsivo para desktop e celular.
+- Dados demonstrativos identificados na interface.
 
-## Importante
+## Publicação
 
-Todos os registros da versão atual são fictícios e estão identificados como demonstração. O protótipo não se conecta ao banco de produção e não altera dados existentes.
+O workflow do GitHub Actions faz build estático do Next.js e publica a pasta `out` no GitHub Pages após cada push na branch `main`. A publicação só funcionará quando GitHub Pages estiver habilitado para o repositório usando GitHub Actions.
+
+## Segurança e dados
+
+- Nenhuma conexão com o banco de produção nesta etapa.
+- Nenhuma chave ou segredo do Supabase incluído no frontend.
+- Nenhum registro real alterado.
+- A conexão com Supabase, autenticação, permissões e migração de dados serão implementadas apenas após validação do modelo e das regras financeiras.
 
 ## Próximas etapas
 
-1. Revisar regras de negócio e cálculos financeiros.
-2. Validar os dados de origem e os campos reais do sistema atual.
-3. Definir backend e autenticação fora do Base44.
-4. Criar ambiente de teste e conectar dados somente após validação e backup.
-5. Testar relatórios e conciliação antes de qualquer migração.
-
-Nenhuma migração de produção foi realizada.
+1. Verificar o build e a publicação.
+2. Revisar a consistência dos indicadores e filtros.
+3. Ajustar campos e fluxos de cada módulo conforme as regras reais da CPS.
+4. Preparar um ambiente de teste Supabase, separado da produção.
+5. Importar uma cópia validada dos dados e conciliar os totais antes de qualquer migração.
