@@ -131,3 +131,13 @@ main[data-theme] section ::selection { background: var(--cps-accent); color: var
   main[data-theme] > div { grid-template-columns: 1fr !important; }
   main[data-theme] aside { position: relative !important; border-right: 0 !important; border-bottom: 1px solid var(--cps-border) !important; }
 }
+
+.cps-stagger > * { animation: cps-premium-enter 380ms ease both; }
+.cps-stagger > *:nth-child(2) { animation-delay: 45ms; }
+.cps-stagger > *:nth-child(3) { animation-delay: 90ms; }
+.cps-stagger > *:nth-child(4) { animation-delay: 135ms; }
+.cps-stagger > *:nth-child(5) { animation-delay: 180ms; }
+.cps-stagger > *:nth-child(6) { animation-delay: 225ms; }
+.cps-card:hover { transform: translateY(-3px); border-color: var(--cps-border-strong) !important; box-shadow: var(--cps-shadow-hover) !important; }
+.cps-button--primary { background: linear-gradient(135deg,#f6d977,var(--cps-accent) 70%) !important; color: var(--cps-accent-text) !important; border-color: #dfb93f !important; box-shadow: 0 5px 16px rgb(180 139 26 / 15%); }
+.cps-button--primary:hover { box-shadow: 0 8px 22px rgb(180 139 26 / 24%); }
