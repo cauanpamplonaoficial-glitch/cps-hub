@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
-import { Activity, Boxes, CircleDollarSign, LogOut, Package, Plus, RefreshCw, Search, ShoppingBag, Truck, Users, Wallet, Database } from "lucide-react";
+import { Activity, Boxes, CircleDollarSign, Crown, LogOut, Package, Plus, RefreshCw, Search, ShoppingBag, Truck, Users, Wallet, Database } from "lucide-react";
 
 type ModuleName = "products" | "customers" | "suppliers" | "sales" | "purchases" | "inventory_movements" | "expenses" | "v1_archive" | "conversations" | "history";
 type RowData = Record<string, unknown> & { id: string; created_at?: string };
@@ -194,8 +194,8 @@ export default function Home() {
     </header>
     <div style={{ display: "grid", gridTemplateColumns: "220px minmax(0,1fr)", minHeight: "calc(100vh - 68px)" }}>
       <aside style={{ borderRight: "1px solid #292b32", padding: 14 }}>
-        <p style={{ fontSize: 10, letterSpacing: 1.5, color: "#777b86", fontWeight: 800, paddingLeft: 10 }}>GESTÃO</p>
-        {modules.map(item => { const Icon = item.icon; return <button key={item.id} onClick={()=>{setModule(item.id);setShowForm(false);setForm({});}} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "11px 10px", marginBottom: 4, borderRadius: 8, border: 0, background: module===item.id ? "#2b2718" : "transparent", color: module===item.id ? "#f2cc46" : "#b7b9c2", cursor: "pointer" }}><Icon size={17}/>{item.label}</button>; })}
+        <p style={{ fontSize: 10, letterSpacing: 1.5, color: "#777b86", fontWeight: 800, paddingLeft: 10 }}>CPS STORE</p>
+        <button onClick={()=>{window.location.href="/apple-royal";}} style={{ display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",padding:"11px 10px",margin:"12px 0",borderRadius:8,border:"1px solid #4a4122",background:"#292617",color:"#f2cc46",cursor:"pointer",fontWeight:700 }}><Crown size={17}/> Apple Royal <span style={{marginLeft:"auto",fontSize:9,background:"#f2cc46",color:"#17150d",padding:"3px 5px",borderRadius:4}}>PARCERIA</span></button>{modules.map(item => { const Icon = item.icon; return <button key={item.id} onClick={()=>{setModule(item.id);setShowForm(false);setForm({});}} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "11px 10px", marginBottom: 4, borderRadius: 8, border: 0, background: module===item.id ? "#2b2718" : "transparent", color: module===item.id ? "#f2cc46" : "#b7b9c2", cursor: "pointer" }}><Icon size={17}/>{item.label}</button>; })}
         <div style={{ margin: "24px 8px", padding: 12, border: "1px solid #3b3524", borderRadius: 9, color: "#c3b77f", fontSize: 11, lineHeight: 1.6 }}>Dados isolados por conta. Vendas e compras preservam os dados importados do V1.</div>
       </aside>
       <section style={{ padding: "28px clamp(14px,3vw,36px)", minWidth: 0 }}>
