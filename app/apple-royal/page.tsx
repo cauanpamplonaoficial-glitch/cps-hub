@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, FormEvent } from "react";
 import { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
-import { ArrowLeft, Smartphone, LayoutDashboard, Package, ShoppingBag, Wallet, Truck, ShieldCheck, BarChart3, Files, Plus, RefreshCw, Search, Crown } from "lucide-react";
+import { ArrowLeft, Smartphone, LayoutDashboard, Package, ShoppingBag, Wallet, Truck, ShieldCheck, BarChart3, Files, Plus, RefreshCw, Search, Crown, CircleDollarSign } from "lucide-react";
 
 type Tab = "overview" | "devices" | "reservations" | "sales" | "finance" | "deliveries" | "warranty" | "reports" | "documents";
 type R = Record<string, any> & { id: string };
