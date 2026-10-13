@@ -169,3 +169,58 @@ main[data-theme] section ::selection { background: var(--cps-accent); color: var
 .apple-royal-app button:focus-visible,.apple-royal-app input:focus-visible,.apple-royal-app select:focus-visible{outline:3px solid rgb(232 199 106 / 55%);outline-offset:2px}
 @media(prefers-reduced-motion:reduce){.apple-royal-app,.apple-royal-app *,.apple-royal-app *:before,.apple-royal-app *:after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 @media(max-width:760px){.apple-royal-app{grid-template-columns:1fr!important}.apple-royal-app .apple-royal-sidebar{border-right:0!important;border-bottom:1px solid var(--ar-border)!important}}
+
+/* APPLE ROYAL CLEAN OVERVIEW — spacious, low-noise dashboard */
+.apple-royal-app .ar-overview{display:flex;flex-direction:column;gap:24px;max-width:1500px;margin:0 auto}
+.apple-royal-app .ar-tabs{display:flex;align-items:center;gap:clamp(16px,2.5vw,34px);overflow-x:auto;white-space:nowrap;border-bottom:1px solid var(--ar-border);scrollbar-width:thin}
+.apple-royal-app .ar-tabs button{position:relative;flex:0 0 auto;padding:0 0 14px;border:0;background:transparent;color:var(--ar-muted);font-size:12px;font-weight:600;transition:color 180ms ease}
+.apple-royal-app .ar-tabs button:hover,.apple-royal-app .ar-tabs button.active{color:var(--ar-text)}
+.apple-royal-app .ar-tabs button.active:after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;border-radius:4px;background:var(--ar-gold);box-shadow:0 0 12px rgb(232 199 106 / 20%)}
+.apple-royal-app .ar-clean-hero{display:flex;align-items:center;justify-content:space-between;gap:28px;min-height:190px;padding:clamp(24px,3vw,38px);border-radius:20px;overflow:hidden;position:relative;background:radial-gradient(ellipse at 95% 15%,rgb(232 199 106 / 13%),transparent 36%),linear-gradient(115deg,#171b24,#10131a 72%);box-shadow:0 18px 48px rgb(0 0 0 / 12%)}
+.apple-royal-app .ar-clean-hero:after{content:"";position:absolute;width:320px;height:320px;border-radius:50%;right:12%;top:-220px;border:1px solid rgb(232 199 106 / 10%);box-shadow:0 0 0 35px rgb(232 199 106 / 2%),0 0 0 70px rgb(232 199 106 / 2%);pointer-events:none}
+.apple-royal-app[data-theme="light"] .ar-clean-hero{background:radial-gradient(ellipse at 95% 15%,rgb(152 112 28 / 10%),transparent 36%),linear-gradient(115deg,#fff7df,#fff 76%);box-shadow:var(--ar-shadow)}
+.apple-royal-app .ar-eyebrow{font-size:10px;letter-spacing:2px;font-weight:800;color:var(--ar-gold)}
+.apple-royal-app .ar-clean-hero h2{font-size:clamp(25px,3vw,34px);line-height:1.16;letter-spacing:-1.1px;margin:13px 0 9px;max-width:600px}
+.apple-royal-app .ar-clean-hero p{font-size:13px;line-height:1.7;margin:0 0 20px;max-width:560px;color:var(--ar-muted)}
+.apple-royal-app .ar-hero-cta{display:inline-flex;align-items:center;gap:9px;padding:11px 15px;border:0;border-radius:9px;background:linear-gradient(135deg,#f3d77d,#dfb744);color:#201a0c;font-weight:800;font-size:12px;box-shadow:0 7px 22px rgb(193 153 63 / 15%);transition:transform 180ms ease,box-shadow 180ms ease}
+.apple-royal-app .ar-hero-cta:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgb(193 153 63 / 23%)}
+.apple-royal-app .ar-hero-mark{position:relative;z-index:1;min-width:175px;display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--ar-gold);opacity:.9}
+.apple-royal-app .ar-hero-mark span{font-size:12px;letter-spacing:2px;font-weight:800}
+.apple-royal-app .ar-hero-mark small{font-size:8px;letter-spacing:1.7px;color:var(--ar-muted)}
+.apple-royal-app .ar-clean-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.apple-royal-app .ar-clean-metric{min-width:0;padding:22px 22px 20px;border-radius:15px;background:var(--ar-surface);box-shadow:var(--ar-shadow);animation:cps-premium-enter 420ms ease both;transition:transform 200ms ease,background-color 200ms ease,box-shadow 200ms ease}
+.apple-royal-app .ar-clean-metric:hover{transform:translateY(-3px);box-shadow:0 18px 38px rgb(0 0 0 / 15%)}
+.apple-royal-app[data-theme="light"] .ar-clean-metric:hover{box-shadow:0 18px 38px rgb(49 42 23 / 10%)}
+.apple-royal-app .ar-metric-top{display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--ar-muted);font-size:11px}
+.apple-royal-app .ar-metric-top svg{color:var(--ar-gold);flex-shrink:0}
+.apple-royal-app .ar-clean-metric>strong{display:block;margin:18px 0 8px;color:var(--ar-text);font-size:clamp(22px,2.3vw,29px);line-height:1.15;letter-spacing:-.8px;font-weight:800;overflow-wrap:anywhere}
+.apple-royal-app .ar-clean-metric>small{font-size:10px;color:var(--ar-muted)}
+.apple-royal-app .ar-clean-content{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:20px}
+.apple-royal-app .ar-clean-panel{min-width:0;padding:24px;border-radius:17px;background:var(--ar-surface);box-shadow:var(--ar-shadow)}
+.apple-royal-app .ar-panel-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px}
+.apple-royal-app .ar-panel-heading h3{margin:0 0 5px;font-size:15px;font-weight:750;letter-spacing:-.35px}
+.apple-royal-app .ar-panel-heading p{margin:0;font-size:11px;color:var(--ar-muted)}
+.apple-royal-app .ar-panel-heading button{display:inline-flex;align-items:center;gap:7px;padding:7px 0;border:0;background:transparent;color:var(--ar-gold);font-size:11px;font-weight:700;white-space:nowrap}
+.apple-royal-app .ar-device-list,.apple-royal-app .ar-sales-list{display:flex;flex-direction:column}
+.apple-royal-app .ar-device-row,.apple-royal-app .ar-sale-row{display:flex;align-items:center;gap:12px;padding:15px 0;border-bottom:1px solid var(--ar-border);min-width:0}
+.apple-royal-app .ar-device-row:last-child,.apple-royal-app .ar-sale-row:last-child{border-bottom:0;padding-bottom:0}
+.apple-royal-app .ar-device-row:first-child,.apple-royal-app .ar-sale-row:first-child{padding-top:4px}
+.apple-royal-app .ar-device-icon,.apple-royal-app .ar-sale-glyph{height:42px;width:42px;display:grid;place-items:center;flex-shrink:0;border-radius:12px;background:var(--ar-raised);color:var(--ar-gold)}
+.apple-royal-app .ar-device-info,.apple-royal-app .ar-sale-info{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
+.apple-royal-app .ar-device-info strong,.apple-royal-app .ar-sale-info strong{font-size:12px;color:var(--ar-text);font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.apple-royal-app .ar-device-info span,.apple-royal-app .ar-sale-info span{font-size:10px;color:var(--ar-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.apple-royal-app .ar-status{display:inline-flex;align-items:center;flex-shrink:0;border-radius:20px;padding:5px 8px;font-size:9px;font-weight:750;white-space:nowrap}
+.apple-royal-app .ar-status.is-available{background:rgb(38 185 111 / 13%);color:#37c981}
+.apple-royal-app .ar-status.is-sold{background:rgb(139 148 163 / 15%);color:var(--ar-muted)}
+.apple-royal-app .ar-status.is-reserved{background:rgb(232 199 106 / 14%);color:var(--ar-gold)}
+.apple-royal-app .ar-status.is-other{background:rgb(105 148 220 / 13%);color:#7da8f0}
+.apple-royal-app .ar-sale-value{display:flex;flex-direction:column;align-items:flex-end;gap:7px;flex-shrink:0}
+.apple-royal-app .ar-sale-value>strong{font-size:12px;color:var(--ar-text);font-weight:800;white-space:nowrap}
+.apple-royal-app .ar-clean-empty{display:flex;min-height:170px;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;color:var(--ar-muted);font-size:12px}
+.apple-royal-app .ar-clean-empty svg{color:var(--ar-gold)}
+.apple-royal-app .ar-clean-empty button{border:0;background:transparent;color:var(--ar-gold);font-size:11px;font-weight:800}
+.apple-royal-app .ar-clean-footer{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;color:var(--ar-muted);font-size:10px;padding:0 2px 8px}
+.apple-royal-app .ar-clean-footer>span:first-child{display:flex;align-items:center;gap:8px}
+.apple-royal-app .ar-live-dot{height:6px;width:6px;border-radius:50%;background:#37c981;box-shadow:0 0 0 4px rgb(55 201 129 / 10%)}
+@media(max-width:1100px){.apple-royal-app .ar-clean-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.apple-royal-app .ar-clean-content{grid-template-columns:1fr}.apple-royal-app .ar-hero-mark{min-width:125px}}
+@media(max-width:650px){.apple-royal-app .ar-overview{gap:18px}.apple-royal-app .ar-clean-hero{padding:23px;min-height:0}.apple-royal-app .ar-hero-mark{display:none}.apple-royal-app .ar-clean-metrics{gap:10px}.apple-royal-app .ar-clean-metric{padding:16px}.apple-royal-app .ar-clean-metric>strong{font-size:21px;margin-top:14px}.apple-royal-app .ar-clean-panel{padding:17px}.apple-royal-app .ar-device-row,.apple-royal-app .ar-sale-row{gap:9px}.apple-royal-app .ar-status{font-size:8px;padding:4px 6px}.apple-royal-app .ar-clean-footer{line-height:1.6}}
