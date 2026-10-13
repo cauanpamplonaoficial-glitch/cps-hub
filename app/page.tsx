@@ -121,7 +121,17 @@ export default function Home() {
 }
 
 function Kpi({title,value,change,icon:Icon,iconTone,trend}:{title:string;value:string;change:string;icon:LucideIcon;iconTone:string;trend:string}) {
- return <section className="kpi-card"><div className="kpi-title"><span>{title}</span><span className={"kpi-icon "+iconTone}><Icon size={19}/></span></div><div className="kpi-value">{value}</div><div className="kpi-change">{trend==="up"?<ArrowUpRight size={14} className="change-icon"/>:<Activity size={13} className="change-muted"}/><span>{change}</span></div></section>;
+ const trendIcon = trend === "up" ? <ArrowUpRight size={14} className="change-icon" /> : <Activity size={13} className="change-muted" />;
+ return (
+  <section className="kpi-card">
+   <div className="kpi-title">
+    <span>{title}</span>
+    <span className={"kpi-icon " + iconTone}><Icon size={19} /></span>
+   </div>
+   <div className="kpi-value">{value}</div>
+   <div className="kpi-change">{trendIcon}<span>{change}</span></div>
+  </section>
+ );
 }
 function Status({status}:{status:Sale["status"]}) { return <span className={"status status-"+status.toLowerCase()}><i/>{status}</span>; }
 function FinanceChart({sales}:{sales:Sale[]}) {
