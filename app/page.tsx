@@ -56,7 +56,7 @@ export default function Home() {
     if (module === "history") query = query.eq("entity_name", "AuditLog");
     if (module === "v1_archive") query = query.not("entity_name", "like", "Consorcio%");
     const orderColumn = module === "sales" ? "sold_at" : module === "purchases" ? "ordered_at" : ["v1_archive","conversations","history"].includes(module) ? "imported_at" : "created_at";
-    const { data, error } = await query.order(orderColumn, { ascending: false }).limit(200);
+    const { data, error } = await query.order(orderColumn, { ascending: false }).limit(["v1_archive","conversations","history"].includes(module) ? 1000 : 200);
     if (error) { setRows([]); setNotice(error.message); }
     else setRows((data || []) as RowData[]);
     if (module === "sales" || module === "purchases") {
