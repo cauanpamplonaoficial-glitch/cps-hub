@@ -63,7 +63,7 @@ export default function Home() {
         supabase.from("inventory_movements").select("id,created_at,movement_type,quantity_delta").order("created_at",{ascending:false}).limit(8)
       ]);
       const err = [p,s,bu,e,cu,mv].find(x=>x.error);
-      if (err) { setNotice(err.error.message); setDash({}); setRows([]); } else {
+      if (err?.error) { setNotice(err.error.message); setDash({}); setRows([]); } else {
         const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
         const inMonth = (x:any, key:string) => { const d = new Date(x[key] || x.created_at || 0); return !Number.isNaN(d.getTime()) && d >= monthStart; };
         setDash({products:p.data||[],sales:s.data||[],purchases:bu.data||[],expenses:e.data||[],customers:cu.data||[],movements:mv.data||[],monthlySales:(s.data||[]).filter((x:any)=>inMonth(x,"sold_at")),monthlyPurchases:(bu.data||[]).filter((x:any)=>inMonth(x,"ordered_at")),monthlyExpenses:(e.data||[]).filter((x:any)=>inMonth(x,"due_date"))}); setRows([]);
