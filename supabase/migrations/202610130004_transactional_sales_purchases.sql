@@ -11,7 +11,7 @@ create or replace function public.create_sale(
   p_items jsonb
 ) returns uuid
 language plpgsql
-security definer
+security invoker
 set search_path = public, pg_temp
 as $$
 declare
@@ -80,7 +80,7 @@ create or replace function public.create_purchase(
   p_items jsonb
 ) returns uuid
 language plpgsql
-security definer
+security invoker
 set search_path = public, pg_temp
 as $$
 declare
