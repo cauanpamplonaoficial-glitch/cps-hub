@@ -53,7 +53,24 @@ export default function Home() {
   const loadRows = useCallback(async () => {
     if (!session) return;
     setBusy(true); setNotice("");
-    if (module === "dashboard") {\n      const [p,s,bu,e,cu,mv] = await Promise.all([\n        supabase.from("products").select("id,name,stock_quantity,min_stock,cost_price,sale_price,active").eq("active",true).limit(2000),\n        supabase.from("sales").select("id,total,subtotal,status,channel,sold_at,created_at").order("created_at",{ascending:false}).limit(2000),\n        supabase.from("purchases").select("id,total,ordered_at,created_at").order("created_at",{ascending:false}).limit(2000),\n        supabase.from("expenses").select("id,amount,due_date,created_at,status").limit(2000),\n        supabase.from("customers").select("id").limit(2000),\n        supabase.from("inventory_movements").select("id,created_at,movement_type,quantity_delta").order("created_at",{ascending:false}).limit(8)\n      ]);\n      const err = [p,s,bu,e,cu,mv].find(x=>x.error);\n      if (err) { setNotice(err.error.message); setDash({}); setRows([]); } else {\n        const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);\n        const inMonth = (x:any, key:string) => { const d = new Date(x[key] || x.created_at || 0); return !Number.isNaN(d.getTime()) && d >= monthStart; };\n        setDash({products:p.data||[],sales:s.data||[],purchases:bu.data||[],expenses:e.data||[],customers:cu.data||[],movements:mv.data||[],monthlySales:(s.data||[]).filter((x:any)=>inMonth(x,"sold_at")),monthlyPurchases:(bu.data||[]).filter((x:any)=>inMonth(x,"ordered_at")),monthlyExpenses:(e.data||[]).filter((x:any)=>inMonth(x,"due_date"))}); setRows([]);\n      }\n      setBusy(false); return;\n    }\n    let query = supabase.from(["conversations","history"].includes(module) ? "v1_archive" : module).select("*");
+    if (module === "dashboard") {
+      const [p,s,bu,e,cu,mv] = await Promise.all([
+        supabase.from("products").select("id,name,stock_quantity,min_stock,cost_price,sale_price,active").eq("active",true).limit(2000),
+        supabase.from("sales").select("id,total,subtotal,status,channel,sold_at,created_at").order("created_at",{ascending:false}).limit(2000),
+        supabase.from("purchases").select("id,total,ordered_at,created_at").order("created_at",{ascending:false}).limit(2000),
+        supabase.from("expenses").select("id,amount,due_date,created_at,status").limit(2000),
+        supabase.from("customers").select("id").limit(2000),
+        supabase.from("inventory_movements").select("id,created_at,movement_type,quantity_delta").order("created_at",{ascending:false}).limit(8)
+      ]);
+      const err = [p,s,bu,e,cu,mv].find(x=>x.error);
+      if (err) { setNotice(err.error.message); setDash({}); setRows([]); } else {
+        const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
+        const inMonth = (x:any, key:string) => { const d = new Date(x[key] || x.created_at || 0); return !Number.isNaN(d.getTime()) && d >= monthStart; };
+        setDash({products:p.data||[],sales:s.data||[],purchases:bu.data||[],expenses:e.data||[],customers:cu.data||[],movements:mv.data||[],monthlySales:(s.data||[]).filter((x:any)=>inMonth(x,"sold_at")),monthlyPurchases:(bu.data||[]).filter((x:any)=>inMonth(x,"ordered_at")),monthlyExpenses:(e.data||[]).filter((x:any)=>inMonth(x,"due_date"))}); setRows([]);
+      }
+      setBusy(false); return;
+    }
+    let query = supabase.from(["conversations","history"].includes(module) ? "v1_archive" : module).select("*");
     if (module === "conversations") query = query.in("entity_name", ["InboxConversation", "InboxMessage", "ChatMessage"]);
     if (module === "history") query = query.eq("entity_name", "AuditLog");
     if (module === "v1_archive") query = query.not("entity_name", "like", "Consorcio%");
