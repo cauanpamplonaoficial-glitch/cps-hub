@@ -3,8 +3,6 @@ name: CPS Hub V2 — validação e publicação
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
 
 permissions:
   contents: read
