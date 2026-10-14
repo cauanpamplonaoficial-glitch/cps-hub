@@ -281,3 +281,56 @@ main[data-theme] section ::selection { background: var(--cps-accent); color: var
 @media (prefers-reduced-motion: reduce) {
   .cps-mobile-menu-toggle, .cps-sidebar, .cps-card { animation: none !important; transition: none !important; }
 }
+
+
+.ar-mobile-menu-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid var(--border, #30323a);
+  border-radius: 10px;
+  background: var(--surface, #141720);
+  color: var(--text, #f4f6fb);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.ar-mobile-menu-toggle:focus-visible {
+  outline: 2px solid var(--gold, #f2cc46);
+  outline-offset: 2px;
+}
+@media (max-width: 760px) {
+  .apple-royal-app { display: block !important; min-height: 100vh; }
+  .ar-mobile-menu-toggle { display: inline-flex; flex: 0 0 auto; }
+  .apple-royal-sidebar { display: none !important; }
+  .apple-royal-app.is-menu-open .apple-royal-sidebar {
+    display: flex !important;
+    position: fixed;
+    z-index: 120;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(290px, 86vw);
+    overflow-y: auto;
+    box-shadow: 18px 0 42px rgba(0, 0, 0, .4);
+    padding-bottom: max(18px, env(safe-area-inset-bottom));
+  }
+  .apple-royal-content { padding: 18px 12px !important; }
+  .ar-clean-metrics { grid-template-columns: minmax(0, 1fr) !important; }
+  .ar-clean-content { grid-template-columns: minmax(0, 1fr) !important; }
+  .apple-royal-content input, .apple-royal-content select,
+  .apple-royal-content textarea, .apple-royal-content button {
+    touch-action: manipulation;
+  }
+  .apple-royal-content input, .apple-royal-content select,
+  .apple-royal-content textarea { min-height: 42px; }
+  .apple-royal-content table { min-width: 680px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ar-mobile-menu-toggle, .apple-royal-sidebar { animation: none !important; transition: none !important; }
+}
