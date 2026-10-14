@@ -1,9 +1,6 @@
 name: Verify CPS Hub V2 changes
 
 on:
-  push:
-    branches-ignore:
-      - main
   pull_request:
     branches:
       - main
