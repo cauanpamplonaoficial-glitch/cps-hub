@@ -137,6 +137,7 @@ export const getDashboardMetrics = (data: {
     channelTotals,
     monthlyExpenseTotal: monthlyExpenses.reduce((sum, expense) => sum + amount(expense.amount), 0),
     monthlyPurchaseTotal: monthlyPurchases.reduce((sum, purchase) => sum + amount(purchase.total), 0),
+    costBasisComplete: monthlySales.every((sale) => Boolean(sale.sale_items?.length) && sale.sale_items!.every((item) => amount(item.unit_cost) > 0)),
     customersCount: data.customers.length,
   };
 };
