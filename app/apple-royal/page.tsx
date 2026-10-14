@@ -101,7 +101,7 @@ export default function AppleRoyalPage(){
  if(!session)return <main style={{background:"#0b0c0f",color:"white",minHeight:"100vh",display:"grid",placeItems:"center"}}><div style={{maxWidth:440,padding:28,border:"1px solid #292b32",borderRadius:16,background:"#14161b"}}><h1>Apple Royal</h1><p>Entre no CPS Hub V2 para acessar o módulo privado.</p><button style={button} onClick={()=>window.location.assign(new URL("../", window.location.href).toString())}>Ir para login</button></div></main>;
  const metric=rows[0]||{};const sales=(metric.sales||[]) as R[];const rems=(metric.remittances||[]) as R[];
  const activeSales=sales.filter((sale:R)=>!["cancelled","returned","refunded"].includes(String(sale.status||"").toLowerCase()));
- const paidRemittanceBySale=rems.filter((item:R)=>item.status==="paid"&&item.sale_id).reduce((totals:Record<string,number>,item:R)=>({...totals,[item.sale_id]: (totals[item.sale_id]||0)+Number(item.amount||0)}),{});
+ const paidRemittanceBySale=rems.filter((item:R)=>item.status==="paid"&&item.sale_id).reduce<Record<string,number>>((totals,item)=>({...totals,[item.sale_id]: (totals[item.sale_id]||0)+Number(item.amount||0)}),{});
  const pendingPartnerAmount=activeSales.reduce((sum:number,sale:R)=>sum+Math.max(0,Number(sale.partner_amount_due||0)-Math.max(Number(sale.amount_remitted||0),Number(paidRemittanceBySale[sale.id]||0))),0);
  const receivedSalesAmount=activeSales.reduce((sum:number,sale:R)=>sum+Number(sale.amount_received||0),0);
  const estimatedOperationResult=activeSales.reduce((sum:number,sale:R)=>sum+Number(sale.sale_price||0)-Number(sale.partner_amount_due||0)-Number(sale.additional_costs||0),0);
