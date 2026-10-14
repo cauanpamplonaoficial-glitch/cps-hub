@@ -224,3 +224,60 @@ main[data-theme] section ::selection { background: var(--cps-accent); color: var
 .apple-royal-app .ar-live-dot{height:6px;width:6px;border-radius:50%;background:#37c981;box-shadow:0 0 0 4px rgb(55 201 129 / 10%)}
 @media(max-width:1100px){.apple-royal-app .ar-clean-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.apple-royal-app .ar-clean-content{grid-template-columns:1fr}.apple-royal-app .ar-hero-mark{min-width:125px}}
 @media(max-width:650px){.apple-royal-app .ar-overview{gap:18px}.apple-royal-app .ar-clean-hero{padding:23px;min-height:0}.apple-royal-app .ar-hero-mark{display:none}.apple-royal-app .ar-clean-metrics{gap:10px}.apple-royal-app .ar-clean-metric{padding:16px}.apple-royal-app .ar-clean-metric>strong{font-size:21px;margin-top:14px}.apple-royal-app .ar-clean-panel{padding:17px}.apple-royal-app .ar-device-row,.apple-royal-app .ar-sale-row{gap:9px}.apple-royal-app .ar-status{font-size:8px;padding:4px 6px}.apple-royal-app .ar-clean-footer{line-height:1.6}}
+
+
+/* Mobile navigation and responsive dashboard safeguards */
+.cps-mobile-menu-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid var(--border, #30323a);
+  border-radius: 10px;
+  background: var(--surface, #141720);
+  color: var(--text, #f4f6fb);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.cps-mobile-menu-toggle:focus-visible {
+  outline: 2px solid var(--gold, #f2cc46);
+  outline-offset: 2px;
+}
+@media (max-width: 760px) {
+  .cps-header { padding-left: 12px !important; padding-right: 12px !important; }
+  .cps-mobile-menu-toggle { display: inline-flex; flex: 0 0 auto; }
+  .cps-header > div:first-of-type { margin-right: auto; min-width: 0; }
+  .cps-header > div:first-of-type strong { font-size: 12px; }
+  .cps-header > div:first-of-type > div { font-size: 8px !important; }
+  .cps-header > div:last-child { gap: 5px !important; }
+  .cps-layout { display: block !important; min-height: calc(100vh - 68px) !important; }
+  .cps-sidebar { display: none !important; }
+  .cps-layout.is-menu-open .cps-sidebar {
+    display: block !important;
+    position: fixed;
+    z-index: 100;
+    top: 68px;
+    bottom: 0;
+    left: 0;
+    width: min(290px, 86vw);
+    overflow-y: auto;
+    background: var(--bg, #0b0d12);
+    box-shadow: 18px 0 42px rgba(0, 0, 0, .35);
+    border-right: 1px solid var(--border, #2a3040);
+    padding-bottom: max(18px, env(safe-area-inset-bottom));
+  }
+  .cps-content { padding: 20px 12px !important; }
+  .cps-stagger { grid-template-columns: minmax(0, 1fr) !important; }
+  .cps-content input, .cps-content select, .cps-content textarea,
+  .cps-content button { touch-action: manipulation; }
+  .cps-content input, .cps-content select, .cps-content textarea { min-height: 42px; }
+  .cps-content table { min-width: 620px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cps-mobile-menu-toggle, .cps-sidebar, .cps-card { animation: none !important; transition: none !important; }
+}
