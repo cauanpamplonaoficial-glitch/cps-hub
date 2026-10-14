@@ -67,14 +67,27 @@ export const getDashboardMetrics = (data: {
   expenses: DashboardExpense[];
   customers: Array<{ id: string }>;
   monthStart?: Date;
+  periodStart?: Date;
+  periodEnd?: Date;
 }) => {
   const monthStart = data.monthStart ?? new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  const periodStart = data.periodStart ?? monthStart;
+  const periodEnd = data.periodEnd;
   const sales = data.sales.filter((sale) => !isCancelled(sale.status));
   const purchases = data.purchases.filter((purchase) => !isCancelled(purchase.status));
   const expenses = data.expenses.filter((expense) => !isCancelled(expense.status));
-  const monthlySales = sales.filter((sale) => isInMonth(sale.sold_at, sale.created_at, monthStart));
-  const monthlyPurchases = purchases.filter((purchase) => isInMonth(purchase.ordered_at, purchase.created_at, monthStart));
-  const monthlyExpenses = expenses.filter((expense) => isInMonth(expense.due_date, expense.created_at, monthStart));
+  const isInPeriod = (value: string | null | undefined, fallback: string | null | undefined) => {
+    const valueToCheck = value || fallback;
+    if (!isInMonth(valueToCheck, null, periodStart)) return false;
+    if (!periodEnd || !valueToCheck) return true;
+    const parsed = /^\d{4}-\d{2}-\d{2}$/.test(valueToCheck)
+      ? new Date(`${valueToCheck}T23:59:59.999`)
+      : new Date(valueToCheck);
+    return !Number.isNaN(parsed.getTime()) && parsed <= periodEnd;
+  };
+  const monthlySales = sales.filter((sale) => isInPeriod(sale.sold_at, sale.created_at));
+  const monthlyPurchases = purchases.filter((purchase) => isInPeriod(purchase.ordered_at, purchase.created_at));
+  const monthlyExpenses = expenses.filter((expense) => isInPeriod(expense.due_date, expense.created_at));
 
   const calculateSaleTotals = (saleRows: DashboardSale[]) =>
     saleRows.reduce(
@@ -121,6 +134,10 @@ export const getDashboardMetrics = (data: {
   const todayPendingExpenses = expenses
     .filter((expense) => !["paid", "cancelled", "canceled"].includes(String(expense.status || "").toLowerCase()) && isToday(expense.due_date))
     .reduce((sum, expense) => sum + amount(expense.amount), 0);
+  const cancelledSales = data.sales.filter((sale) => isCancelled(sale.status));
+  const cancelledSalesToday = cancelledSales.filter((sale) => isToday(sale.sold_at || sale.created_at));
+  const cancelledSalesTodayTotal = cancelledSalesToday.reduce((sum, sale) => sum + amount(sale.subtotal), 0);
+  const missingCostProducts = data.products.filter((product) => amount(product.stock_quantity) > 0 && amount(product.cost_price) <= 0);
 
   const salesTotals = calculateSaleTotals(monthlySales);
   const inventoryCost = data.products.reduce(
@@ -160,6 +177,9 @@ export const getDashboardMetrics = (data: {
     todaySalesTotals,
     todayPaidExpenses,
     todayPendingExpenses,
+    cancelledSalesToday,
+    cancelledSalesTodayTotal,
+    missingCostProducts,
     inventoryCost,
     potentialInventoryMargin,
     lowStockProducts,
