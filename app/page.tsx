@@ -81,7 +81,26 @@ export default function Home() {
     const orderColumn = module === "sales" ? "sold_at" : module === "purchases" ? "ordered_at" : ["v1_archive","conversations","history"].includes(module) ? "imported_at" : "created_at";
     const { data, error } = await query.order(orderColumn, { ascending: false }).limit(["v1_archive","conversations","history"].includes(module) ? 1000 : 200);
     if (error) { setRows([]); setNotice(error.message); }
-    else setRows((data || []) as RowData[]);
+    else if (module === "customers") {
+      const { data: salesData, error: salesError } = await supabase.from("sales").select("customer_id,subtotal,discount,status,sold_at,created_at").not("customer_id", "is", null).limit(2000);
+      if (salesError) setNotice("Clientes carregados, mas o histórico de compras não pôde ser consultado: " + salesError.message);
+      const summaries = new Map<string, { count: number; total: number; lastPurchase: string | null }>();
+      for (const sale of salesData || []) {
+        if (["cancelled", "canceled", "returned", "refunded", "void"].includes(String(sale.status || "").toLowerCase())) continue;
+        const customerId = String(sale.customer_id || "");
+        if (!customerId) continue;
+        const summary = summaries.get(customerId) || { count: 0, total: 0, lastPurchase: null };
+        summary.count += 1;
+        summary.total += Math.max(0, Number(sale.subtotal || 0) - Number(sale.discount || 0));
+        const date = String(sale.sold_at || sale.created_at || "");
+        if (date && (!summary.lastPurchase || new Date(date).getTime() > new Date(summary.lastPurchase).getTime())) summary.lastPurchase = date;
+        summaries.set(customerId, summary);
+      }
+      setRows(((data || []) as RowData[]).map((customer) => {
+        const summary = summaries.get(customer.id) || { count: 0, total: 0, lastPurchase: null };
+        return { ...customer, purchase_count: summary.count, total_spent: summary.total, last_purchase: summary.lastPurchase };
+      }));
+    } else setRows((data || []) as RowData[]);
     if (module === "sales" || module === "purchases") {
       const [p,c,sup] = await Promise.all([
         supabase.from("products").select("id,name,stock_quantity,sale_price,cost_price").eq("active",true).order("name").limit(500),
@@ -212,7 +231,7 @@ export default function Home() {
 
   const display = (row: RowData) => {
     if (module === "products") return [row.name, row.sku || "—", row.category || "—", money(row.cost_price), money(row.sale_price), String(row.stock_quantity ?? 0)];
-    if (module === "customers") return [row.name, row.phone || "—", row.email || "—", row.notes || "—"];
+    if (module === "customers") return [row.name, row.phone || "—", row.email || "—", String(row.purchase_count ?? 0), money(row.total_spent), row.last_purchase ? new Date(String(row.last_purchase)).toLocaleDateString("pt-BR") : "Sem compras", row.notes || "—"];
     if (module === "suppliers") return [row.name, row.phone || "—", row.email || "—", row.document_number || "—"];
     if (["v1_archive","conversations","history"].includes(module)) return [row.entity_name, row.legacy_id, JSON.stringify(row.payload || {}).slice(0,220), row.imported_at ? new Date(String(row.imported_at)).toLocaleString("pt-BR") : "—"];
     if (module === "expenses") return [row.description, row.category || "—", money(row.amount), row.due_date || "—", row.status || "pending"];
@@ -233,7 +252,7 @@ export default function Home() {
   }
 
   const columns = module === "products" ? ["Produto","SKU","Categoria","Custo","Venda","Estoque"] :
-    module === "customers" ? ["Cliente","Telefone","E-mail","Observações"] :
+    module === "customers" ? ["Cliente","Telefone","E-mail","Compras","Total comprado","Última compra","Observações"] :
     module === "suppliers" ? ["Fornecedor","Telefone","E-mail","Documento"] :
     module === "expenses" ? ["Despesa","Categoria","Valor","Vencimento","Status"] :
     ["v1_archive","conversations","history"].includes(module) ? ["Tipo","ID original","Dados preservados (resumo)","Importado em"] :
