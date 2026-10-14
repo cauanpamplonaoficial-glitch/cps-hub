@@ -52,7 +52,11 @@ export const isInMonth = (
   fallback: string | null | undefined,
   monthStart: Date,
 ): boolean => {
-  const date = new Date(value || fallback || "");
+  const dateValue = value || fallback || "";
+  const calendarDate = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateValue);
+  const date = calendarDate
+    ? new Date(Number(calendarDate[1]), Number(calendarDate[2]) - 1, Number(calendarDate[3]))
+    : new Date(dateValue);
   return !Number.isNaN(date.getTime()) && date >= monthStart;
 };
 
@@ -86,11 +90,12 @@ export const getDashboardMetrics = (data: {
 
         totals.grossSales += subtotal;
         totals.discounts += discount;
-        totals.netSales += Math.max(0, subtotal - discount);
+        const netSales = Math.max(0, subtotal - discount);
+        totals.netSales += netSales;
         totals.fees += fees;
         totals.shipping += shipping;
         totals.costOfGoods += costOfGoods;
-        totals.estimatedProfit += subtotal - discount - fees - shipping - costOfGoods;
+        totals.estimatedProfit += netSales - fees - shipping - costOfGoods;
         return totals;
       },
       { grossSales: 0, discounts: 0, netSales: 0, fees: 0, shipping: 0, costOfGoods: 0, estimatedProfit: 0 },
@@ -99,7 +104,10 @@ export const getDashboardMetrics = (data: {
   const today = new Date();
   const isToday = (value: string | null | undefined) => {
     if (!value) return false;
-    const date = new Date(value);
+    const calendarDate = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    const date = calendarDate
+      ? new Date(Number(calendarDate[1]), Number(calendarDate[2]) - 1, Number(calendarDate[3]))
+      : new Date(value);
     return !Number.isNaN(date.getTime()) &&
       date.getFullYear() === today.getFullYear() &&
       date.getMonth() === today.getMonth() &&

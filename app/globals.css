@@ -334,3 +334,36 @@ main[data-theme] section ::selection { background: var(--cps-accent); color: var
 @media (prefers-reduced-motion: reduce) {
   .ar-mobile-menu-toggle, .apple-royal-sidebar { animation: none !important; transition: none !important; }
 }
+
+.ar-mobile-scrim { display: none; }
+.ar-reconciliation-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 14px 0;
+  padding: 14px 16px;
+  border: 1px solid #62522b;
+  border-radius: 10px;
+  background: #211e15;
+  color: #ead9a1;
+  font-size: 11px;
+}
+.ar-reconciliation-alert p { margin: 5px 0 0; color: #bcb39b; line-height: 1.6; }
+.ar-reconciliation-alert>div:last-child { display: flex; flex-wrap: wrap; gap: 8px; }
+.ar-reconciliation-alert button {
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid #62522b;
+  border-radius: 7px;
+  background: #2a261b;
+  color: #f3d985;
+  font: inherit;
+  font-weight: 700;
+}
+@media(max-width:760px) {
+  .ar-mobile-scrim { display: block; position: fixed; inset: 0; z-index: 110; border: 0; background: rgba(0,0,0,.58); }
+  .ar-reconciliation-alert { align-items: flex-start; flex-direction: column; }
+  .ar-reconciliation-alert>div:last-child { width: 100%; }
+  .ar-reconciliation-alert button { flex: 1; }
+}
