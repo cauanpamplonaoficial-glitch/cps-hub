@@ -96,6 +96,24 @@ export const getDashboardMetrics = (data: {
       { grossSales: 0, discounts: 0, netSales: 0, fees: 0, shipping: 0, costOfGoods: 0, estimatedProfit: 0 },
     );
 
+  const today = new Date();
+  const isToday = (value: string | null | undefined) => {
+    if (!value) return false;
+    const date = new Date(value);
+    return !Number.isNaN(date.getTime()) &&
+      date.getFullYear() === today.getFullYear() &&
+      date.getMonth() === today.getMonth() &&
+      date.getDate() === today.getDate();
+  };
+  const todaySales = sales.filter((sale) => isToday(sale.sold_at || sale.created_at));
+  const todaySalesTotals = calculateSaleTotals(todaySales);
+  const todayPaidExpenses = expenses
+    .filter((expense) => String(expense.status || "").toLowerCase() === "paid" && isToday(expense.paid_at))
+    .reduce((sum, expense) => sum + amount(expense.amount), 0);
+  const todayPendingExpenses = expenses
+    .filter((expense) => !["paid", "cancelled", "canceled"].includes(String(expense.status || "").toLowerCase()) && isToday(expense.due_date))
+    .reduce((sum, expense) => sum + amount(expense.amount), 0);
+
   const salesTotals = calculateSaleTotals(monthlySales);
   const inventoryCost = data.products.reduce(
     (sum, product) => sum + amount(product.stock_quantity) * amount(product.cost_price),
@@ -131,6 +149,9 @@ export const getDashboardMetrics = (data: {
     monthlyPurchases,
     monthlyExpenses,
     salesTotals,
+    todaySalesTotals,
+    todayPaidExpenses,
+    todayPendingExpenses,
     inventoryCost,
     potentialInventoryMargin,
     lowStockProducts,
