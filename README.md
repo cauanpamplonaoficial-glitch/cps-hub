@@ -1,3 +1,4 @@
+Attempting to perform the InitializeDefaultDrives operation on the 'FileSystem' provider failed.
 # CPS Hub V2 — CRM das operações CPS
 
 Aplicação Next.js com TypeScript, React, CSS próprio e Supabase. CPS Store e Apple Royal compartilham a autenticação e navegação, mantendo seus fluxos financeiros separados.
@@ -37,7 +38,9 @@ Configure as variáveis de ambiente usando `.env.example` como referência. Use 
 - A comparação mais recente consultou somente IDs técnicos do Base44: os 870 IDs atuais correspondem ao arquivo V1 do Supabase, sem faltantes ou extras. A verificação anterior também confirmou payloads idênticos para os 22 registros arquivados com autorização e nenhuma alteração nas tabelas operacionais.
 - Ainda faltam teste de isolamento com uma segunda conta real e validação de backup/restauração. A revisão visual autenticada dos dois módulos foi concluída nesta sessão.
 - O Security Advisor do Supabase de teste alerta que a proteção contra senhas vazadas está desativada; essa configuração exige revisão no painel.
-- O histórico de migrações ainda precisa ser reconciliado: o Supabase registra 28 versões, enquanto a pasta local tem 21 arquivos com versões divergentes. Não rode `supabase db push` até alinhar e verificar esse histórico.
+- A migração `20261015173445_harden_ledger_table_privileges` removeu grants de escrita anônima e bloqueou alterações/exclusões diretas dos livros append-only no Supabase de teste. Os cabeçalhos financeiros ainda aceitam `UPDATE` autenticado fora das RPCs; isso precisa ser restringido e validado antes de uso comercial.
+- O histórico de migrações ainda precisa ser reconciliado: o Supabase registra 29 versões, enquanto a pasta local tem 22 arquivos com versões divergentes/consolidadas. Não rode `supabase db push` até alinhar e verificar esse histórico.
 - O GitHub Pages publica a interface estática no ambiente Supabase de testes autorizado; o workflow não aplica migrações no banco. Não use dados reais até configurar e validar um projeto de produção autorizado.
 
 Consulte [REBUILD-PLAN.md](./REBUILD-PLAN.md), [AUDIT-2026-10-13.md](./AUDIT-2026-10-13.md) e [DEPLOYMENT.md](./DEPLOYMENT.md) para detalhes.
+
