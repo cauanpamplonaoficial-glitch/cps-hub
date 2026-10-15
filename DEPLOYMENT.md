@@ -26,3 +26,12 @@ O GitHub Actions executa TypeScript, Biome lint e build. Publica `out` no GitHub
 5. Habilitar leaked-password protection no Supabase Auth e revisar os advisors.
 6. Validar backup, restauração e exportação dos dados.
 7. Confirmar checks da PR desta branch antes de integrar ou publicar.
+
+## Bloqueios confirmados na auditoria de 2026-10-15
+- A migração `20261015173445_harden_ledger_table_privileges` foi aplicada somente no Supabase de teste. Removeu todos os grants de escrita de `anon`, bloqueou exclusões dos registros operacionais e tornou itens/movimentos/recebimentos/atividades append-only. Validação confirmou zero grants de escrita anônimos, zero grants de update/delete nos registros append-only e zero fixtures persistidas.
+- Ainda existem `UPDATE` diretos em cabeçalhos de venda/compra e registros financeiros Apple Royal, necessários atualmente às RPCs invoker. Um cliente autenticado ainda poderia alterar alguns valores próprios fora dos fluxos. Restringir esses updates sem quebrar as RPCs continua obrigatório antes de uso comercial.
+- O banco de teste agora registra 29 versões; o repositório contém 22 arquivos. As alterações iniciais estão consolidadas com versões diferentes. Não reaplicar migrações nem executar `db push` antes de reconciliar a sequência.
+- O banco de teste tem uma conta; o isolamento entre duas contas reais ainda não foi testado. Backup e restauração também continuam pendentes.
+- O Security Advisor ainda sinaliza a proteção contra senhas vazadas desativada.
+- O CLI oficial 2.79.0 não concluiu a instalação temporária (falha no postinstall). Para manter a alteração rastreável, a migração foi aplicada pelo MCP no projeto de teste e o arquivo local foi espelhado usando a versão retornada pelo banco; ainda requer reconciliação da sequência total antes de `db push`.
+

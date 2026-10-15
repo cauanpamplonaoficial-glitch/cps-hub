@@ -9,9 +9,9 @@ Reunir as operações ativas da CPS Store e Apple Royal em um CRM único, confi�
 - O app Base44 `CPS Hub V2` tem somente o modelo `User`; ele é principalmente uma referência visual/estrutural, não uma fonte de domínio completa.
 - O app Base44 `CPS Control Center` reúne mais de 30 modelos, cobrindo loja, inventário, vendas, CRM, consórcios, atendimento, tarefas, metas, serviços e relatórios. Alguns modelos têm regras de leitura amplas; permissões não serão presumidas como seguras sem auditoria.
 - Existem cópias do Control Center com esquemas diferentes. Nenhuma cópia deve ser escolhida como fonte oficial de dados sem reconciliação.
-- O repositório atual está em Next.js/React/TypeScript e Supabase, na branch isolada `feature/cps-hub-rebuild-20261015`, derivada da branch de confiabilidade. CPS STORE e Apple Royal estão concentradas em duas páginas grandes.
-- A PR de confiabilidade permanece separada e em rascunho. O último check consultado aprovou TypeScript e build; não há automação E2E no projeto.
-- O projeto V2 documenta migrações, proteção de estoque/transações e isolamento por proprietário. A aplicação e a branch permanecem em ambiente de teste; este plano não autoriza alterar o Supabase antigo nem publicar.
+- O repositório atual está em Next.js/React/TypeScript e Supabase, na branch local isolada `feature/cps-hub-rebuild-20261015`. A PR #1 foi integrada em `main` (merge `da87106`); a árvore do commit local validado corresponde à árvore atual de `main`.
+- O CPS Hub V2 está publicado no GitHub Pages e conectado somente ao Supabase de teste autorizado. Consórcios permanece fora da interface por decisão do usuário; seu schema e histórico ficam preservados.
+- Não há automação E2E. A auditoria atual confirmou TypeScript, lint, 11 testes e build estático, mas encontrou bloqueios de segurança e migração descritos no registro mais recente ao final deste documento.
 
 ## Produto alvo
 
@@ -99,9 +99,9 @@ O Security Advisor do Supabase de teste reporta **proteção contra senhas vazad
 
 **Conclusão:** os registros da V2 correspondem majoritariamente ao conjunto do Base44, mas há diferenças explicadas por chaves e status que exigem uma decisão de migração e validação por item: 2 produtos Base44 e 1 cliente sem par; a V2 tem 6 produtos extras sem estoque. Todos os 116 IDs de venda V2 correspondem a vendas Base44, mas 1 venda Base44 confirmada de R$ 40,00 está ausente; duas vendas devolvidas de R$ 320,00 estão ativas como `confirmed` na V2. Todos os 63 IDs de compras V2 e 222 movimentações V2 correspondem a registros Base44; faltam 4 compras e 4 movimentações no V2. O saldo agregado de estoque difere em +8 unidades do lado Base44 e a diferença coincide com as movimentações ausentes, mas há flags de aplicação inconsistentes e um produto sem par. Não importar, corrigir, cancelar ou deduplicar automaticamente.
 
-### Estado atualizado
+### Registro histórico de status — 2026-10-15
 
-O dashboard e o seletor CPS STORE / Apple Royal já existiam no código local; adicionei Consórcios ao seletor e aos atalhos laterais dos outros módulos. A captura antiga mostra uma tela publicada sem dashboard visível, então ainda falta validar visualmente a versão servida. Em 2026-10-15, a instalação congelada, `pnpm exec tsc --noEmit`, `pnpm run lint` e `pnpm run build` passaram nesta branch. O lint ainda lista 33 avisos (23 usos de `any` e 10 avisos de acessibilidade); a revisão visual do navegador segue pendente.
+As notas abaixo registram etapas anteriores e não representam o estado atual do GitHub, do navegador ou da interface. Consulte a seção **Auditoria de continuação — 2026-10-15** ao final para o estado revalidado.
 
 ### Entrega parcial do CRM de Consórcios
 
@@ -254,3 +254,19 @@ O dashboard e o seletor CPS STORE / Apple Royal já existiam no código local; a
 - O formulário de vendas da CPS STORE passou a aceitar vários produtos na mesma venda, com preço unitário por linha, subtotal em centavos, remoção de itens e validação da quantidade combinada contra o estoque consultado. A RPC `create_sale` ainda revalida e grava itens, venda e movimentos de estoque atomicamente.
 - A busca de produtos, clientes e fornecedores usada pelos formulários agora pagina todos os registros, com ordenação estável e mensagem de carga parcial em caso de erro; deixou de parar silenciosamente em 500 resultados. Os testes cobrem subtotal fracionário, bloqueio da quantidade além do estoque e rejeição de preço unitário vazio (que não pode virar venda grátis). Validação atual: 11 testes, lint, TypeScript, build estático (`/`, `/apple-royal`) e `git diff --check` aprovados.
 - O preview local foi reiniciado na porta 4175 após o build. O navegador integrado ainda não consegue acessar o loopback, então a revisão visual permanece pendente.
+
+### Auditoria de continuação — 2026-10-15
+
+- Estado GitHub confirmado pela API: PR #1 integrada e fechada; `main` está em `da87106`. A árvore de arquivos é idêntica à do commit local `ba7e478` (`49afd31`), e o workflow de validação/publicação de `main` terminou com sucesso. O checkout segue isolado na branch local `feature/cps-hub-rebuild-20261015`, sem alterações de código anteriores a esta auditoria.
+- Validação executada novamente: `pnpm test` 11/11; `pnpm lint`; `pnpm exec tsc --noEmit`; `pnpm build` (rotas estáticas `/` e `/apple-royal`); `git diff --check`. Tudo passou.
+- Preview atual acessível no navegador integrado em `http://127.0.0.1:4175/`. A revisão ao vivo confirmou o dashboard CPS Store com dados da conta de teste, alternância de negócios, e Apple Royal com estado vazio coerente. Nenhum registro foi criado ou alterado nesta inspeção. Consórcios não aparece na navegação, conforme decisão do usuário.
+- Supabase de teste: 23/23 tabelas públicas com RLS habilitada; políticas verificadas usam ownership por `auth.uid()` (com política de arquivo V1 específica); 12 RPCs de venda, compra e Apple Royal consultadas são `SECURITY INVOKER`. Há somente uma conta, então não foi possível provar isolamento com uma segunda conta real.
+- **Hardening aplicado no Supabase de teste:** a migração `20261015173445_harden_ledger_table_privileges` removeu grants de escrita de `anon`, removeu exclusões em produtos/despesas/vendas/compras e tabelas Apple Royal, e tornou itens, movimentos de estoque, recebimentos e atividades append-only. A consulta posterior encontrou zero grants de escrita para `anon`, zero grants UPDATE/DELETE nos livros append-only e zero fixtures de teste persistidas. Testes SQL em transação revertida passaram para criação/cancelamento CPS, venda Apple sem aparelho, recebimento, repasse, cancelamento e rejeição de alterações/exclusões diretas.
+- **Risco residual:** cabeçalhos CPS de venda/compra e campos de vendas/recebimentos/repasses Apple ainda permitem `UPDATE` pelo papel autenticado. As RPCs invoker precisam dessas permissões hoje, então ainda é possível alterar valores próprios fora do fluxo transacional. Restringir esses updates sem quebrar as operações segue obrigatório antes de uso comercial.
+- A migração foi aplicada apenas ao banco de teste `abxmblwgsuiayfhkwzvu`; nenhum dado de negócio foi alterado. O Supabase CLI 2.79.0 foi baixado, mas o postinstall falhou. O arquivo local foi espelhado pelo número de versão retornado pelo banco: `supabase/migrations/20261015173445_harden_ledger_table_privileges.sql`.
+- Histórico atual: 29 versões no Supabase e 22 arquivos locais. Parte das mudanças antigas está consolidada sob versões diferentes; não executar `db push` nem reaplicar scripts antes de reconstruir o mapa e comparar o schema.
+- O Security Advisor continua sinalizando leaked-password protection desativada. O Performance Advisor mostra quatro FKs sem índice nas tabelas históricas de Consórcios. O isolamento entre duas contas reais e backup/restauração continuam pendentes.
+- Histórico confirmado: 28 versões registradas pelo Supabase versus 21 arquivos locais. As primeiras alterações foram divididas/consolidadas com identificadores diferentes; a lista de nomes sozinha não prova equivalência de conteúdo. Nenhuma migração foi aplicada neste turno. Não rodar `db push` ou reaplicar scripts até reconstruir o mapa histórico e comparar o schema.
+- Advisor de segurança segue com `auth_leaked_password_protection` em WARN. O Advisor de performance aponta quatro FKs sem índice em tabelas históricas de Consórcios; não foram removidos dados nem adicionados índices. A interface continua removida.
+- Sem alteração no Supabase antigo ou na produção; o site público permanece ligado ao projeto de teste. Backup/restauração real, teste RLS com segunda conta e hardening de grants continuam bloqueios para uso comercial.
+
