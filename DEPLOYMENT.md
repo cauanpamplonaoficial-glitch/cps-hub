@@ -1,4 +1,3 @@
-Attempting to perform the InitializeDefaultDrives operation on the 'FileSystem' provider failed.
 # CPS Hub V2 — publicação e segurança
 
 ## Publicação
