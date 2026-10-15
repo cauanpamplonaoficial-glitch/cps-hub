@@ -1,14 +1,12 @@
-name: Deploy CPS Hub V2 to GitHub Pages # build 2026-10-13 V1 archive UI
+name: CPS Hub V2 — validação e publicação
 
 on:
   push:
     branches: [main]
-  workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
+  pages: read
 
 concurrency:
   group: github-pages
@@ -20,28 +18,46 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: pnpm
       - name: Install dependencies
-        run: npm install
+        run: pnpm install --frozen-lockfile
       - name: Type-check TypeScript
-        run: npx tsc --noEmit
+        run: pnpm exec tsc --noEmit
+      - name: Lint
+        run: pnpm run lint
+      - name: Run financial logic tests
+        run: pnpm test
       - name: Build static Next.js app
-        run: npm run build
+        run: pnpm run build
       - name: Configure Pages
         uses: actions/configure-pages@v5
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          enablement: false
       - name: Upload static site
         uses: actions/upload-pages-artifact@v3
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           path: ./out
   deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     needs: build
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     steps:
       - name: Deploy to GitHub Pages
         id: deployment

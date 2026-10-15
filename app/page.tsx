@@ -1,12 +1,25 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Session } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase";
-import { Activity, Boxes, CircleDollarSign, Crown, LogOut, Package, Plus, RefreshCw, Search, ShoppingBag, Truck, Users, Wallet, Database, Sun, Moon } from "lucide-react";
+import { legacySupabase as supabase } from "@/lib/supabase";
+import { fetchAllPages } from "@/lib/supabase-pagination";
+import { SaleCartEditor } from "@/components/sale-cart-editor";
+import { type SaleCartLine, type SaleCartProduct } from "@/lib/sale-cart";
+import { getDashboardMetrics, getNetSaleAmount, summarizeCustomerPurchases, type CustomerHistorySale, type DashboardExpense, type DashboardProduct, type DashboardPurchase, type DashboardSale } from "@/lib/dashboard-metrics";
+import { Activity, Boxes, CircleDollarSign, Crown, LogOut, Package, Plus, RefreshCw, Search, ShoppingBag, Truck, Users, Wallet, Database, Sun, Moon, Menu, X } from "lucide-react";
 
 type ModuleName = "dashboard" | "products" | "customers" | "suppliers" | "sales" | "purchases" | "inventory_movements" | "expenses" | "v1_archive" | "conversations" | "history";
 type RowData = Record<string, unknown> & { id: string; created_at?: string };
+type DashboardData = {
+  products: DashboardProduct[];
+  sales: DashboardSale[];
+  purchases: DashboardPurchase[];
+  expenses: DashboardExpense[];
+  customers: Array<{ id: string }>;
+  movements: Array<{ id: string; created_at?: string | null; movement_type?: string | null; quantity_delta?: number | string | null }>;
+};
+type SearchResult = { id: string; module: "products" | "customers" | "sales"; label: string; detail: string };
 const modules: { id: ModuleName; label: string; icon: typeof Package }[] = [
   { id: "dashboard", label: "Dashboard executivo", icon: CircleDollarSign },
   { id: "products", label: "Produtos", icon: Package },
@@ -34,16 +47,37 @@ export default function Home() {
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [module, setModule] = useState<ModuleName>("dashboard");
-  const [dash, setDash] = useState<Record<string, any>>({});
+  const [dash, setDash] = useState<DashboardData>({ products: [], sales: [], purchases: [], expenses: [], customers: [], movements: [] });
+  const [dashboardComplete, setDashboardComplete] = useState(false);
   const [rows, setRows] = useState<RowData[]>([]);
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [globalSearch, setGlobalSearch] = useState("");
+  const [globalResults, setGlobalResults] = useState<SearchResult[]>([]);
+  const [globalFocus, setGlobalFocus] = useState<SearchResult | null>(null);
+  const [globalSearchBusy, setGlobalSearchBusy] = useState(false);
+  const [periodPreset, setPeriodPreset] = useState<"7d" | "30d" | "month" | "custom">("month");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const [page, setPage] = useState(0);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [channelFilter, setChannelFilter] = useState("all");
+  const [rowCount, setRowCount] = useState(0);
+  const [selectedProduct, setSelectedProduct] = useState<RowData | null>(null);
+  const [productMovements, setProductMovements] = useState<RowData[]>([]);
+  const [productMovementsBusy, setProductMovementsBusy] = useState(false);
   const [form, setForm] = useState<Record<string, string>>({});
+  const [saleItems, setSaleItems] = useState<SaleCartLine[]>([]);
   const [lookupProducts, setLookupProducts] = useState<RowData[]>([]);
   const [lookupCustomers, setLookupCustomers] = useState<RowData[]>([]);
   const [lookupSuppliers, setLookupSuppliers] = useState<RowData[]>([]);
+  const loadSequence = useRef(0);
+  const globalSearchSequence = useRef(0);
+  const productDetailSequence = useRef(0);
 
   useEffect(() => { const saved = window.localStorage.getItem("cps-hub-theme"); if (saved === "light" || saved === "dark") setTheme(saved); }, []);
   useEffect(() => { window.localStorage.setItem("cps-hub-theme", theme); }, [theme]);
@@ -56,44 +90,132 @@ export default function Home() {
 
   const loadRows = useCallback(async () => {
     if (!session) return;
+    const requestId = ++loadSequence.current;
     setBusy(true); setNotice("");
     if (module === "dashboard") {
+      setDashboardComplete(false);
       const [p,s,bu,e,cu,mv] = await Promise.all([
-        supabase.from("products").select("id,name,stock_quantity,min_stock,cost_price,sale_price,active").eq("active",true).limit(2000),
-        supabase.from("sales").select("id,subtotal,status,channel,sold_at,created_at").order("created_at",{ascending:false}).limit(2000),
-        supabase.from("purchases").select("id,total,ordered_at,created_at").order("created_at",{ascending:false}).limit(2000),
-        supabase.from("expenses").select("id,amount,due_date,created_at,status").limit(2000),
-        supabase.from("customers").select("id").limit(2000),
+        fetchAllPages((from,to)=>supabase.from("products").select("id,name,stock_quantity,min_stock,cost_price,sale_price,active").eq("active",true).order("id",{ascending:true}).range(from,to), 1000),
+        fetchAllPages((from,to)=>supabase.from("sales").select("id,subtotal,discount,fees,shipping_cost,status,channel,sold_at,created_at,sale_items(quantity,unit_cost)").order("created_at",{ascending:false}).order("id",{ascending:true}).range(from,to), 1000),
+        fetchAllPages((from,to)=>supabase.from("purchases").select("id,total,status,ordered_at,created_at").order("created_at",{ascending:false}).order("id",{ascending:true}).range(from,to), 1000),
+        fetchAllPages((from,to)=>supabase.from("expenses").select("id,amount,due_date,paid_at,created_at,status").order("created_at",{ascending:false}).order("id",{ascending:true}).range(from,to), 1000),
+        fetchAllPages((from,to)=>supabase.from("customers").select("id").order("id",{ascending:true}).range(from,to), 1000),
         supabase.from("inventory_movements").select("id,created_at,movement_type,quantity_delta").order("created_at",{ascending:false}).limit(8)
       ]);
+      if (requestId !== loadSequence.current) return;
       const err = [p,s,bu,e,cu,mv].find(x=>x.error);
-      if (err?.error) { setNotice(err.error.message); setDash({}); setRows([]); } else {
-        const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
-        const inMonth = (x:any, key:string) => { const d = new Date(x[key] || x.created_at || 0); return !Number.isNaN(d.getTime()) && d >= monthStart; };
-        setDash({products:p.data||[],sales:s.data||[],purchases:bu.data||[],expenses:e.data||[],customers:cu.data||[],movements:mv.data||[],monthlySales:(s.data||[]).filter((x:any)=>inMonth(x,"sold_at")),monthlyPurchases:(bu.data||[]).filter((x:any)=>inMonth(x,"ordered_at")),monthlyExpenses:(e.data||[]).filter((x:any)=>inMonth(x,"due_date"))}); setRows([]);
+      if (err?.error) { setNotice("O painel não exibirá indicadores enquanto os dados estiverem incompletos. " + err.error.message); setDash({products:[],sales:[],purchases:[],expenses:[],customers:[],movements:[]}); setRows([]); } else {
+        setDash({products:p.data||[],sales:s.data||[],purchases:bu.data||[],expenses:e.data||[],customers:cu.data||[],movements:mv.data||[]}); setRows([]); setDashboardComplete(true);
       }
       setBusy(false); return;
     }
-    let query = supabase.from(["conversations","history"].includes(module) ? "v1_archive" : module).select("*");
+    let query = supabase.from(["conversations","history"].includes(module) ? "v1_archive" : module).select("*", { count: "exact" });
     if (module === "conversations") query = query.in("entity_name", ["InboxConversation", "InboxMessage", "ChatMessage"]);
     if (module === "history") query = query.eq("entity_name", "AuditLog");
     if (module === "v1_archive") query = query.not("entity_name", "like", "Consorcio%");
+    if (globalFocus?.module === module) query = query.eq("id", globalFocus.id);
+    if ((module === "sales" || module === "purchases" || module === "expenses") && statusFilter !== "all") query = query.eq("status", statusFilter);
+    if (module === "sales" && channelFilter !== "all") query = query.eq("channel", channelFilter);
     const orderColumn = module === "sales" ? "sold_at" : module === "purchases" ? "ordered_at" : ["v1_archive","conversations","history"].includes(module) ? "imported_at" : "created_at";
-    const { data, error } = await query.order(orderColumn, { ascending: false }).limit(["v1_archive","conversations","history"].includes(module) ? 1000 : 200);
+    const pageSize = 50;
+    const response = ["v1_archive","conversations","history"].includes(module)
+      ? await query.order(orderColumn, { ascending: false }).limit(1000)
+      : await query.order(orderColumn, { ascending: false }).range(page * pageSize, page * pageSize + pageSize - 1);
+    const { data, error, count } = response;
+    if (requestId !== loadSequence.current) return;
+    setRowCount(count ?? data?.length ?? 0);
     if (error) { setRows([]); setNotice(error.message); }
-    else setRows((data || []) as RowData[]);
+    else if (module === "customers") {
+      const customerIds=(data||[]).map((customer:RowData)=>customer.id);
+      const salesPageSize = 1000;
+      const { data: salesData, error: salesError } = customerIds.length
+        ? await fetchAllPages<CustomerHistorySale>((from, to) => supabase.from("sales")
+          .select("customer_id,subtotal,discount,status,sold_at,created_at")
+          .in("customer_id", customerIds)
+          .not("customer_id", "is", null)
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, to), salesPageSize)
+        : { data: [], error: null };
+      if (requestId !== loadSequence.current) return;
+      if (salesError) setNotice("Clientes carregados, mas o histórico de compras não pôde ser consultado: " + salesError.message);
+      const summaries = summarizeCustomerPurchases(salesData);
+      setRows(((data || []) as RowData[]).map((customer) => {
+        const summary = summaries.get(customer.id) || { count: 0, total: 0, lastPurchase: null };
+        return { ...customer, purchase_history_complete: !salesError, purchase_count: salesError ? null : summary.count, total_spent: salesError ? null : summary.total, last_purchase: salesError ? null : summary.lastPurchase };
+      }));
+    } else setRows((data || []) as RowData[]);
     if (module === "sales" || module === "purchases") {
       const [p,c,sup] = await Promise.all([
-        supabase.from("products").select("id,name,stock_quantity,sale_price,cost_price").eq("active",true).order("name").limit(500),
-        supabase.from("customers").select("id,name").order("name").limit(500),
-        supabase.from("suppliers").select("id,name").order("name").limit(500)
+        fetchAllPages((from,to)=>supabase.from("products").select("id,name,stock_quantity,sale_price,cost_price").eq("active",true).order("name").order("id").range(from,to),1000),
+        fetchAllPages((from,to)=>supabase.from("customers").select("id,name").order("name").order("id").range(from,to),1000),
+        fetchAllPages((from,to)=>supabase.from("suppliers").select("id,name").order("name").order("id").range(from,to),1000)
       ]);
+      if (requestId !== loadSequence.current) return;
+      const lookupError = p.error || c.error || sup.error;
+      if (lookupError) setNotice("Listas do formulário carregadas parcialmente: " + lookupError.message);
       setLookupProducts((p.data || []) as RowData[]); setLookupCustomers((c.data || []) as RowData[]); setLookupSuppliers((sup.data || []) as RowData[]);
     }
     setBusy(false);
-  }, [module, session]);
+  }, [channelFilter, globalFocus, module, page, session, statusFilter]);
 
   useEffect(() => { void loadRows(); }, [loadRows]);
+
+  // Reset the table state whenever the selected module changes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the module value is the reset trigger, not data read by this effect.
+  useEffect(() => {
+    setPage(0);
+    setSelectedRows(new Set());
+    setStatusFilter("all");
+    setChannelFilter("all");
+  }, [module]);
+
+  useEffect(() => {
+    const term = globalSearch.trim();
+    const requestId = ++globalSearchSequence.current;
+    if (term.length < 2 || !session) { setGlobalResults([]); setGlobalSearchBusy(false); return; }
+    setGlobalSearchBusy(true);
+    const timeout = window.setTimeout(async () => {
+      const pattern = `%${term}%`;
+      const [products, customers, sales] = await Promise.all([
+        supabase.from("products").select("id,name,sku,stock_quantity").eq("active", true).ilike("name", pattern).limit(5),
+        supabase.from("customers").select("id,name,phone").ilike("name", pattern).limit(5),
+        supabase.from("sales").select("id,order_number,channel,status,subtotal").ilike("order_number", pattern).order("sold_at", { ascending: false }).limit(5),
+      ]);
+      if (requestId !== globalSearchSequence.current) return;
+      const results: SearchResult[] = [
+        ...(products.data || []).map((row) => ({ id: row.id, module: "products" as const, label: row.name, detail: `${row.sku || "Sem SKU"} · estoque ${row.stock_quantity}` })),
+        ...(customers.data || []).map((row) => ({ id: row.id, module: "customers" as const, label: row.name, detail: row.phone || "Cliente" })),
+        ...(sales.data || []).map((row) => ({ id: row.id, module: "sales" as const, label: row.order_number || `Venda ${row.id.slice(0, 8)}`, detail: `${row.channel || "Manual"} · ${money(row.subtotal)}` })),
+      ];
+      setGlobalResults(results);
+      setGlobalSearchBusy(false);
+    }, 250);
+    return () => window.clearTimeout(timeout);
+  }, [globalSearch, session]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setSelectedProduct(null); setMobileMenuOpen(false); setGlobalResults([]); }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); document.getElementById("cps-global-search")?.focus(); }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  async function openProductDetails(product: RowData) {
+    const requestId = ++productDetailSequence.current;
+    setSelectedProduct(product);
+    setProductMovements([]);
+    setProductMovementsBusy(true);
+    const { data, error } = await supabase.from("inventory_movements")
+      .select("id,movement_type,quantity_delta,reference_type,created_at,notes")
+      .eq("product_id", product.id).order("created_at", { ascending: false }).limit(30);
+    if (requestId !== productDetailSequence.current) return;
+    if (error) setNotice(`Produto aberto; não foi possível carregar movimentações: ${error.message}`);
+    else setProductMovements((data || []) as RowData[]);
+    setProductMovementsBusy(false);
+  }
 
   async function authenticate(e: FormEvent) {
     e.preventDefault(); setBusy(true); setNotice("");
@@ -125,10 +247,9 @@ export default function Home() {
     ];
     if (["v1_archive","conversations","history"].includes(module)) return [];
     if (module === "sales") return [
-      { key: "customer_id", label: "Cliente (opcional)" }, { key: "product_id", label: "Produto", required: true },
-      { key: "quantity", label: "Quantidade", type: "number", required: true }, { key: "unit_price", label: "Preço unitário (R$)", type: "number", required: true },
+      { key: "customer_id", label: "Cliente (opcional)" },
       { key: "channel", label: "Canal de venda" }, { key: "discount", label: "Desconto (R$)", type: "number" }, { key: "fees", label: "Taxas (R$)", type: "number" },
-      { key: "shipping_cost", label: "Frete (R$)", type: "number" }, { key: "notes", label: "Observações" }
+      { key: "shipping_cost", label: "Frete pago pela loja (R$)", type: "number" }, { key: "notes", label: "Observações" }
     ];
     if (module === "purchases") return [
       { key: "supplier_id", label: "Fornecedor (opcional)" }, { key: "product_id", label: "Produto", required: true },
@@ -144,7 +265,9 @@ export default function Home() {
   }
 
   async function saveRow(e: FormEvent) {
-    e.preventDefault(); setBusy(true); setNotice("");
+    e.preventDefault();
+    if (module === "sales" && saleItems.length === 0) { setNotice("Adicione pelo menos um produto à venda."); return; }
+    setBusy(true); setNotice("");
     const fields = fieldsFor();
     const payload: Record<string, unknown> = {};
     for (const field of fields) {
@@ -153,8 +276,20 @@ export default function Home() {
     }
     if (module === "expenses" && !payload.status) payload.status = "pending";
     let error: { message: string } | null = null;
-    if (module === "sales") {
-      const { error: rpcError } = await supabase.rpc("create_sale", { p_customer_id: payload.customer_id || null, p_channel: payload.channel || "Manual", p_notes: payload.notes || null, p_discount: Number(payload.discount || 0), p_fees: Number(payload.fees || 0), p_shipping_cost: Number(payload.shipping_cost || 0), p_items: [{ product_id: payload.product_id, quantity: Number(payload.quantity), unit_price: Number(payload.unit_price) }] });
+    if (module === "products") {
+      const { error: rpcError } = await supabase.rpc("create_product_with_opening_stock", {
+        p_sku: payload.sku || null,
+        p_name: payload.name,
+        p_category: payload.category || null,
+        p_description: payload.description || null,
+        p_cost_price: Number(payload.cost_price || 0),
+        p_sale_price: Number(payload.sale_price || 0),
+        p_stock_quantity: Math.trunc(Number(payload.stock_quantity || 0)),
+        p_min_stock: Math.trunc(Number(payload.min_stock || 0)),
+      });
+      error = rpcError;
+    } else if (module === "sales") {
+      const { error: rpcError } = await supabase.rpc("create_sale", { p_customer_id: payload.customer_id || null, p_channel: payload.channel || "Manual", p_notes: payload.notes || null, p_discount: Number(payload.discount || 0), p_fees: Number(payload.fees || 0), p_shipping_cost: Number(payload.shipping_cost || 0), p_items: saleItems.map(({ product_id, quantity, unit_price }) => ({ product_id, quantity, unit_price })) });
       error = rpcError;
     } else if (module === "purchases") {
       const { error: rpcError } = await supabase.rpc("create_purchase", { p_supplier_id: payload.supplier_id || null, p_notes: payload.notes || null, p_items: [{ product_id: payload.product_id, quantity: Number(payload.quantity), unit_cost: Number(payload.unit_cost) }] });
@@ -162,19 +297,62 @@ export default function Home() {
     } else { const result = await supabase.from(module).insert(payload); error = result.error; }
     setBusy(false);
     if (error) { setNotice(error.message); return; }
-    setNotice("Registro salvo com sucesso."); setShowForm(false); setForm({});
+    setNotice("Registro salvo com sucesso."); setShowForm(false); setForm({}); setSaleItems([]);
     await loadRows();
   }
 
   async function deleteRow(id: string) {
-    if (!window.confirm("Excluir este registro? Esta ação não pode ser desfeita.")) return;
+    const selectedRow = rows.find((row) => row.id === id);
+    if (module === "products" && Number(selectedRow?.stock_quantity || 0) > 0) {
+      setNotice("Não é possível desativar um produto com estoque disponível. Registre a saída do estoque primeiro.");
+      return;
+    }
+    const actionLabel = module === "products" ? "desativar este produto" : module === "expenses" ? "cancelar esta despesa" : module === "sales" ? "cancelar esta venda" : module === "purchases" ? "cancelar esta compra" : "excluir este cadastro";
+    const confirmMessage = module === "sales" || module === "purchases"
+      ? `Confirma ${actionLabel}? O registro original será mantido e o estoque será revertido por uma nova movimentação. A operação será recusada se o histórico ou o saldo não permitir uma reversão segura.`
+      : "Confirma " + actionLabel + "? O histórico financeiro e de estoque será preservado.";
+    if (!window.confirm(confirmMessage)) return;
     setBusy(true);
-    const { error } = await supabase.from(module).delete().eq("id", id);
+    let error: { message: string } | null = null;
+    if (module === "products") {
+      const result = await supabase.from("products").update({ active: false }).eq("id", id);
+      error = result.error;
+    } else if (module === "expenses") {
+      const result = await supabase.from("expenses").update({ status: "cancelled" }).eq("id", id);
+      error = result.error;
+    } else if (module === "sales") {
+      const result = await supabase.rpc("cancel_sale", { p_sale_id: id });
+      error = result.error;
+    } else if (module === "purchases") {
+      const result = await supabase.rpc("cancel_purchase", { p_purchase_id: id });
+      error = result.error;
+    } else {
+      const result = await supabase.from(module).delete().eq("id", id);
+      error = result.error;
+    }
     setBusy(false);
-    if (error) setNotice(error.message); else { setNotice("Registro excluído."); await loadRows(); }
+    if (error) setNotice(error.message);
+    else { setNotice(module === "products" ? "Produto desativado; o histórico foi preservado." : module === "expenses" ? "Despesa cancelada; o registro foi preservado." : module === "sales" ? "Venda cancelada; o estoque foi revertido em uma nova movimentação." : module === "purchases" ? "Compra cancelada; a entrada original foi preservada e o estoque foi revertido." : "Cadastro excluído."); await loadRows(); }
   }
 
-  const visibleRows = rows.filter(row => JSON.stringify(row).toLowerCase().includes(search.toLowerCase()));
+  const visibleRows = rows.filter(row => JSON.stringify(row).toLowerCase().includes(search.toLowerCase()))
+    .filter(row => statusFilter === "all" || String(row.status || "pending") === statusFilter)
+    .filter(row => module !== "sales" || channelFilter === "all" || String(row.channel || "Manual") === channelFilter);
+  const today = new Date();
+  const rangeEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+  const rangeStart = periodPreset === "custom" && customFrom
+    ? new Date(`${customFrom}T00:00:00`)
+    : periodPreset === "7d" ? new Date(today.getFullYear(), today.getMonth(), today.getDate() - 6)
+      : periodPreset === "30d" ? new Date(today.getFullYear(), today.getMonth(), today.getDate() - 29)
+        : new Date(today.getFullYear(), today.getMonth(), 1);
+  const selectedRangeEnd = periodPreset === "custom" && customTo ? new Date(`${customTo}T23:59:59.999`) : rangeEnd;
+  const dashboardMetrics = getDashboardMetrics({ products: dash.products || [], sales: dash.sales || [], purchases: dash.purchases || [], expenses: dash.expenses || [], customers: dash.customers || [], periodStart: rangeStart, periodEnd: selectedRangeEnd });
+  const cartProducts: SaleCartProduct[] = lookupProducts.map((product) => ({
+    id: product.id,
+    name: String(product.name || "Produto"),
+    stock_quantity: Number(product.stock_quantity || 0),
+    sale_price: Number(product.sale_price || 0),
+  }));
   const title = modules.find(m => m.id === module)?.label || "Painel";
   if (!ready) return <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", color: "#eee" }}>Carregando CPS Hub V2…</main>;
 
@@ -194,7 +372,7 @@ export default function Home() {
 
   const display = (row: RowData) => {
     if (module === "products") return [row.name, row.sku || "—", row.category || "—", money(row.cost_price), money(row.sale_price), String(row.stock_quantity ?? 0)];
-    if (module === "customers") return [row.name, row.phone || "—", row.email || "—", row.notes || "—"];
+    if (module === "customers") { const historyIncomplete = row.purchase_history_complete === false; return [row.name, row.phone || "—", row.email || "—", historyIncomplete ? "Incompleto" : String(row.purchase_count ?? 0), historyIncomplete ? "Não conferido" : money(row.total_spent), historyIncomplete ? "Não conferida" : row.last_purchase ? new Date(String(row.last_purchase)).toLocaleDateString("pt-BR") : "Sem compras", row.notes || "—"]; }
     if (module === "suppliers") return [row.name, row.phone || "—", row.email || "—", row.document_number || "—"];
     if (["v1_archive","conversations","history"].includes(module)) return [row.entity_name, row.legacy_id, JSON.stringify(row.payload || {}).slice(0,220), row.imported_at ? new Date(String(row.imported_at)).toLocaleString("pt-BR") : "—"];
     if (module === "expenses") return [row.description, row.category || "—", money(row.amount), row.due_date || "—", row.status || "pending"];
@@ -202,8 +380,21 @@ export default function Home() {
     if (module === "purchases") return [row.supplier_id || "Sem fornecedor", row.status || "pending", new Date(String(row.ordered_at)).toLocaleDateString("pt-BR"), money(row.total)];
     return [row.movement_type, row.product_id, String(row.quantity_delta), row.notes || "—", new Date(String(row.created_at)).toLocaleDateString("pt-BR")];
   };
+  function exportCsv() {
+    const escapeCsv = (value: unknown) => '"' + String(value ?? "").replace(/"/g, '""') + '"';
+    const rowsToExport = selectedRows.size ? visibleRows.filter(row => selectedRows.has(row.id)) : visibleRows;
+    const csv = [columns, ...rowsToExport.map(row => display(row))].map(line => line.map(escapeCsv).join(";")).join("\r\n");
+    const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "cps-store-" + module + "-" + new Date().toISOString().slice(0,10) + ".csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   const columns = module === "products" ? ["Produto","SKU","Categoria","Custo","Venda","Estoque"] :
-    module === "customers" ? ["Cliente","Telefone","E-mail","Observações"] :
+    module === "customers" ? ["Cliente","Telefone","E-mail","Compras","Total comprado","Última compra","Observações"] :
     module === "suppliers" ? ["Fornecedor","Telefone","E-mail","Documento"] :
     module === "expenses" ? ["Despesa","Categoria","Valor","Vencimento","Status"] :
     ["v1_archive","conversations","history"].includes(module) ? ["Tipo","ID original","Dados preservados (resumo)","Importado em"] :
@@ -213,27 +404,41 @@ export default function Home() {
   return <main className="cps-app" data-theme={theme} style={{ minHeight: "100vh", background: theme === "dark" ? "#0d0e12" : "#f4f6fa", color: theme === "dark" ? "#f3f3f5" : "#202431" }}>
     <style jsx global>{`@keyframes cpsFadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}@keyframes cpsGlow{0%,100%{box-shadow:0 0 0 rgba(242,204,70,0)}50%{box-shadow:0 0 24px rgba(242,204,70,.08)}}[data-theme="dark"]{color-scheme:dark;background:#0b0d12!important;color:#f4f6fb!important;--bg:#0b0d12;--surface:#141720;--surface2:#191d27;--text:#f4f6fb;--muted:#a0a9ba;--border:#2a3040;--field:#10131a;--gold:#f5ce4b;--goldText:#17150d}[data-theme="light"]{color-scheme:light;background:#f2f5fa!important;color:#182033!important;--bg:#f2f5fa;--surface:#fff;--surface2:#f8faff;--text:#182033;--muted:#59677e;--border:#dce3ef;--field:#fff;--gold:#f5ce4b;--goldText:#17150d}[data-theme] {transition:background-color .25s ease,color .25s ease}[data-theme] header,[data-theme] aside{transition:background-color .25s ease,border-color .25s ease}[data-theme="dark"] header,[data-theme="dark"] aside{background:#10131a!important;color:#f4f6fb!important;border-color:#252b38!important}[data-theme="dark"] section{background:var(--bg)!important;color:var(--text)!important}[data-theme="light"] header,[data-theme="light"] aside{background:#fff!important;color:#182033!important;border-color:#dce3ef!important;box-shadow:0 4px 24px #23365a08}[data-theme="light"] section{background:radial-gradient(ellipse at 80% 0%,#fff9e8 0%,#f2f5fa 42%)!important;color:#182033!important}[data-theme="light"] section div{border-color:#dce3ef}[data-theme="light"] section div[style*="background:linear-gradient"],[data-theme="light"] section div[style*="background: linear-gradient"],[data-theme="light"] section div[style*="background:radial-gradient"],[data-theme="light"] section div[style*="background: radial-gradient"]{background:linear-gradient(125deg,#fff8df,#ffffff 76%)!important;color:#182033!important;border-color:#eadca4!important}[data-theme="light"] section div[style*="background: #17191e"],[data-theme="light"] section div[style*="background: #14161b"],[data-theme="light"] section div[style*="background: #1b1d23"],[data-theme="light"] section div[style*="background: #15171c"],[data-theme="light"] section div[style*="background: #25272e"],[data-theme="light"] section div[style*="background: #22242b"],[data-theme="light"] section div[style*="background: #292b32"]{background:#fff!important;color:#182033!important;border-color:#dce3ef!important}[data-theme="light"] section *{color:inherit}[data-theme="light"] section p,[data-theme="light"] section label,[data-theme="light"] section small{color:#59677e!important}[data-theme="light"] section h1,[data-theme="light"] section h2,[data-theme="light"] section h3,[data-theme="light"] section strong,[data-theme="light"] section td{color:#182033!important}[data-theme="light"] section [style*="color: #f2cc46"],[data-theme="light"] section [style*="color: #f5ce4b"]{color:#876300!important}[data-theme="light"] section button{transition:transform .18s ease,box-shadow .18s ease,background-color .18s ease;background:#e9eef7!important;color:#202b40!important;border:1px solid #d4ddec!important}[data-theme="light"] section button[style*="background: #f2cc46"],[data-theme="light"] section button[style*="background: #f5ce4b"],[data-theme="light"] section button[type="submit"]{background:#f5ce4b!important;color:#17150d!important;border-color:#e4bd32!important}[data-theme="light"] section input,[data-theme="light"] section select,[data-theme="light"] section textarea{background:#fff!important;color:#182033!important;border:1px solid #cbd5e4!important;box-shadow:0 1px 2px #1927430a!important;color-scheme:light}[data-theme="light"] section input::placeholder,[data-theme="light"] section textarea::placeholder{color:#77849a!important;opacity:1}[data-theme="light"] section table{background:#fff!important;color:#182033!important}[data-theme="light"] section th{background:#edf1f8!important;color:#46536a!important}[data-theme="light"] section td{background:#fff!important;color:#182033!important}[data-theme="light"] aside button{color:#46536a!important;background:transparent!important;border-color:transparent!important}[data-theme="light"] aside button[style*="background: #292617"],[data-theme="light"] aside button[style*="background: #211e13"],[data-theme="light"] aside button[style*="background: rgb(41, 38, 23)"]{background:#fff3c7!important;color:#674d00!important;border-color:#eadca4!important}[data-theme="dark"] section input,[data-theme="dark"] section select,[data-theme="dark"] section textarea{background:#10131a!important;color:#f4f6fb!important;border:1px solid #303748!important;color-scheme:dark}[data-theme="dark"] section table,[data-theme="dark"] section td{background:#141720!important;color:#e9edf5!important}[data-theme="dark"] section th{background:#1c2230!important;color:#b8c1d2!important}[data-theme] section h1{letter-spacing:-.035em}[data-theme] section h2,[data-theme] section h3{letter-spacing:-.02em}[data-theme] section button{transition:transform .18s ease,box-shadow .18s ease,filter .18s ease}[data-theme] section button:hover{transform:translateY(-1px);filter:brightness(1.035);box-shadow:0 7px 18px #10182818}[data-theme] section > div{animation:cpsFadeUp .35s ease both}[data-theme] section div[style*="borderRadius: 12"],[data-theme] section div[style*="borderRadius: 16"],[data-theme] section div[style*="border-radius: 12px"],[data-theme] section div[style*="border-radius: 16px"]{transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}[data-theme="dark"] section div[style*="borderRadius: 12"],[data-theme="dark"] section div[style*="borderRadius: 16"]{box-shadow:0 8px 30px #00000012}[data-theme="light"] section div[style*="borderRadius: 12"],[data-theme="light"] section div[style*="borderRadius: 16"]{box-shadow:0 8px 28px #2538580a}[data-theme] section ::selection{background:#f5ce4b;color:#17150d}[data-theme] ::-webkit-scrollbar{width:10px;height:10px}[data-theme] ::-webkit-scrollbar-thumb{background:#8a93a355;border-radius:20px;border:2px solid transparent;background-clip:content-box}`}</style>
     <header className="cps-header" style={{ height: 68, borderBottom: "1px solid #292b32", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px", gap: 12 }}>
+      <button className="cps-mobile-menu-toggle" type="button" aria-label={mobileMenuOpen ? "Fechar menu" : "Abrir menu"} aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen(open => !open)}><>{mobileMenuOpen ? <X size={20}/> : <Menu size={20}/>}<span>{mobileMenuOpen ? "Fechar" : "Menu"}</span></></button>
       <div><strong style={{ letterSpacing: 1 }}>CPS <span style={{ color: "#f2cc46" }}>HUB V2</span></strong><div style={{ fontSize: 10, color: "#9295a0", marginTop: 4 }}>AMBIENTE SUPABASE DE TESTES</div></div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, flexWrap:"wrap" }}><div role="group" aria-label="Escolher tema" style={{display:"inline-flex",alignItems:"center",gap:4,padding:4,borderRadius:10,border:`1px solid ${theme==="dark"?"#30323a":"#dfe4ed"}`,background:theme==="dark"?"#15171c":"#f1f3f7"}}><button type="button" aria-pressed={theme==="light"} onClick={()=>setTheme("light")} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 11px",border:0,borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:700,background:theme==="light"?"#f2cc46":"transparent",color:theme==="light"?"#17150d":theme==="dark"?"#c4c7d0":"#424858"}}><Sun size={15}/> Claro</button><button type="button" aria-pressed={theme==="dark"} onClick={()=>setTheme("dark")} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 11px",border:0,borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:700,background:theme==="dark"?"#f2cc46":"transparent",color:theme==="dark"?"#17150d":"#424858"}}><Moon size={15}/> Escuro</button></div><span style={{ color: theme === "dark" ? "#a2a4ad" : "#626979" }}>{session.user.email}</span><button onClick={()=>supabase.auth.signOut()} style={{ ...styles.button, background: "#25272e", color: "#eee" }}><LogOut size={15}/> Sair</button></div>
+      <nav className="cps-shop-switcher" aria-label="Alternar loja">
+        <button type="button" aria-current="page" onClick={() => { setModule("dashboard"); setGlobalFocus(null); setMobileMenuOpen(false); }}><ShoppingBag size={15}/><span>CPS STORE</span></button>
+        <button type="button" onClick={() => { setMobileMenuOpen(false); window.location.assign(new URL("apple-royal/", window.location.href).toString()); }}><Crown size={15}/><span>APPLE ROYAL</span></button>
+      </nav>
+      <div className="cps-global-search"><Search size={15}/><input id="cps-global-search" value={globalSearch} onChange={event=>{setGlobalSearch(event.target.value);setGlobalFocus(null);}} placeholder="Buscar produto, cliente ou venda…" aria-label="Busca global"/><kbd>Ctrl K</kbd>{(globalResults.length>0||globalSearchBusy||globalSearch.trim().length>=2)&&<div className="cps-global-results" role="listbox" aria-label="Resultados da busca global">{globalSearchBusy?<div className="cps-global-empty">Buscando…</div>:globalResults.length?globalResults.map(result=><button type="button" role="option" aria-selected={false} key={result.module+result.id} onMouseDown={event=>event.preventDefault()} onClick={()=>{setGlobalFocus(result);setModule(result.module);setGlobalSearch("");setGlobalResults([]);setPage(0);setSearch("");setMobileMenuOpen(false)}}><strong>{result.label}</strong><span>{result.module==="products"?"Produto":result.module==="customers"?"Cliente":"Venda"} · {result.detail}</span></button>):<div className="cps-global-empty">Nenhum resultado encontrado.</div>}</div>}</div>
+      <div className="cps-header-actions" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, flexWrap:"wrap" }}><div role="toolbar" aria-label="Escolher tema" aria-orientation="horizontal" style={{display:"inline-flex",alignItems:"center",gap:4,padding:4,borderRadius:10,border:`1px solid ${theme==="dark"?"#30323a":"#dfe4ed"}`,background:theme==="dark"?"#15171c":"#f1f3f7"}}><button type="button" aria-pressed={theme==="light"} onClick={()=>setTheme("light")} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 11px",border:0,borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:700,background:theme==="light"?"#f2cc46":"transparent",color:theme==="light"?"#17150d":theme==="dark"?"#c4c7d0":"#424858"}}><Sun size={15}/> Claro</button><button type="button" aria-pressed={theme==="dark"} onClick={()=>setTheme("dark")} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 11px",border:0,borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:700,background:theme==="dark"?"#f2cc46":"transparent",color:theme==="dark"?"#17150d":"#424858"}}><Moon size={15}/> Escuro</button></div><span style={{ color: theme === "dark" ? "#a2a4ad" : "#626979" }}>{session.user.email}</span><button type="button" onClick={()=>supabase.auth.signOut()} style={{ ...styles.button, background: "#25272e", color: "#eee" }}><LogOut size={15}/> Sair</button></div>
     </header>
-    <div style={{ display: "grid", gridTemplateColumns: "220px minmax(0,1fr)", minHeight: "calc(100vh - 68px)" }}>
-      <aside className="cps-sidebar" style={{ borderRight: "1px solid #292b32", padding: 14 }}>
+    <div className={`cps-layout${mobileMenuOpen ? " is-menu-open" : ""}`} style={{ display: "grid", gridTemplateColumns: "220px minmax(0,1fr)", minHeight: "calc(100vh - 68px)" }}>
+      {mobileMenuOpen&&<button type="button" className="cps-mobile-scrim" aria-label="Fechar menu" onClick={()=>setMobileMenuOpen(false)}/>}
+      <aside id="cps-sidebar" className="cps-sidebar" style={{ borderRight: "1px solid #292b32", padding: 14 }}>
         <p style={{ fontSize: 10, letterSpacing: 1.5, color: "#777b86", fontWeight: 800, paddingLeft: 10 }}>CPS STORE</p>
-        <button onClick={()=>{window.location.assign(new URL("apple-royal/", window.location.href).toString());}} style={{ display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",padding:"11px 10px",margin:"12px 0",borderRadius:8,border:"1px solid #4a4122",background:"#292617",color:"#f2cc46",cursor:"pointer",fontWeight:700 }}><Crown size={17}/> Apple Royal <span style={{marginLeft:"auto",fontSize:9,background:"#f2cc46",color:"#17150d",padding:"3px 5px",borderRadius:4}}>PARCERIA</span></button>{modules.map(item => { const Icon = item.icon; return <button key={item.id} onClick={()=>{setModule(item.id);setShowForm(false);setForm({});}} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "11px 10px", marginBottom: 4, borderRadius: 8, border: 0, background: module===item.id ? "#2b2718" : "transparent", color: module===item.id ? "#f2cc46" : "#b7b9c2", cursor: "pointer" }}><Icon size={17}/>{item.label}</button>; })}
+        <button type="button" onClick={()=>{setMobileMenuOpen(false);window.location.assign(new URL("apple-royal/", window.location.href).toString());}} style={{ display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",padding:"11px 10px",margin:"12px 0",borderRadius:8,border:"1px solid #4a4122",background:"#292617",color:"#f2cc46",cursor:"pointer",fontWeight:700 }}><Crown size={17}/> Apple Royal <span style={{marginLeft:"auto",fontSize:9,background:"#f2cc46",color:"#17150d",padding:"3px 5px",borderRadius:4}}>PARCERIA</span></button>{modules.map(item => { const Icon = item.icon; return <button type="button" key={item.id} onClick={()=>{setModule(item.id);setGlobalFocus(null);setShowForm(false);setForm({});setSaleItems([]);setMobileMenuOpen(false);}} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "11px 10px", marginBottom: 4, borderRadius: 8, border: 0, background: module===item.id ? "#2b2718" : "transparent", color: module===item.id ? "#f2cc46" : "#b7b9c2", cursor: "pointer" }}><Icon size={17}/>{item.label}</button>; })}
         <div style={{ margin: "24px 8px", padding: 12, border: "1px solid #3b3524", borderRadius: 9, color: "#c3b77f", fontSize: 11, lineHeight: 1.6 }}>Dados isolados por conta. Vendas e compras preservam os dados importados do V1.</div>
       </aside>
       <section className="cps-content" style={{ padding: "28px clamp(14px,3vw,36px)", minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div><p style={{ color: "#f2cc46", fontSize: 10, letterSpacing: 1.5, fontWeight: 800, margin: 0 }}>CPS STORE / MÓDULOS</p><h1 style={{ fontSize: 28, margin: "8px 0" }}>{title}</h1><p style={{ color: "#9699a3", fontSize: 12, margin: 0 }}>Dados vinculados à sua conta. O arquivo V1 mantém os campos originais para conferência.</p></div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button onClick={()=>void loadRows()} style={{ ...styles.button, background: "#22242b", color: "#eee" }}><RefreshCw size={15}/> Atualizar</button>{fieldsFor().length>0&&<button onClick={()=>{setShowForm(!showForm);setForm({});}} style={styles.button}><Plus size={16}/> Novo registro</button>}</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button type="button" onClick={exportCsv} style={{ ...styles.button, background: "#22242b", color: "#eee" }}>Exportar CSV</button><button type="button" onClick={()=>void loadRows()} style={{ ...styles.button, background: "#22242b", color: "#eee" }}><RefreshCw size={15}/> Atualizar</button>{fieldsFor().length>0&&<button type="button" onClick={()=>{setShowForm(!showForm);setForm({});setSaleItems([]);}} style={styles.button}><Plus size={16}/> Novo registro</button>}</div>
         </div>
         {notice && <div role="status" style={{ padding: 12, marginTop: 18, borderRadius: 8, border: "1px solid #51451f", background: "#211e13", color: "#e9d68e", fontSize: 12 }}>{notice}</div>}
-        {module === "dashboard" && <div style={{marginTop:24,display:"grid",gap:18}}><div className="cps-panel cps-hero" style={{padding:24,border:"1px solid #393522",borderRadius:16,background:"radial-gradient(circle at top right,#332b13,#17191e 60%)"}}><div style={{color:"#f2cc46",fontSize:10,fontWeight:800,letterSpacing:2}}>VISÃO EXECUTIVA · CPS STORE</div><h2 style={{fontSize:24,margin:"10px 0 6px"}}>Sua operação em um só lugar</h2><p style={{color:"#a2a4ad",fontSize:12,margin:0}}>Indicadores do ambiente de testes. Valores dependem dos registros existentes e do período selecionado: mês atual.</p><div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:18}}><button className="cps-button cps-button--primary" onClick={()=>{setModule("sales");setShowForm(false);}} style={styles.button}><ShoppingBag size={15}/> Registrar venda</button><button className="cps-button" onClick={()=>{setModule("products");setShowForm(false);}} style={{...styles.button,background:"#292b32",color:"#eee"}}><Package size={15}/> Ver estoque</button></div></div><div className="cps-stagger" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:12}}>{[{label:"Vendas no mês",value:money((dash.monthlySales||[]).reduce((a:number,x:any)=>a+Number(x.total??x.subtotal??0),0)),sub:`${(dash.monthlySales||[]).length} registro(s)`,icon:ShoppingBag},{label:"Compras no mês",value:money((dash.monthlyPurchases||[]).reduce((a:number,x:any)=>a+Number(x.total||0),0)),sub:`${(dash.monthlyPurchases||[]).length} registro(s)`,icon:Boxes},{label:"Despesas no mês",value:money((dash.monthlyExpenses||[]).reduce((a:number,x:any)=>a+Number(x.amount||0),0)),sub:`${(dash.monthlyExpenses||[]).length} registro(s)`,icon:Wallet},{label:"Clientes cadastrados",value:String((dash.customers||[]).length),sub:"Registros consultados",icon:Users},{label:"Valor do estoque (custo)",value:money((dash.products||[]).reduce((a:number,x:any)=>a+Number(x.stock_quantity||0)*Number(x.cost_price||0),0)),sub:`${(dash.products||[]).length} produto(s) ativo(s)`,icon:Package},{label:"Margem potencial em estoque",value:money((dash.products||[]).reduce((a:number,x:any)=>a+Number(x.stock_quantity||0)*(Number(x.sale_price||0)-Number(x.cost_price||0)),0)),sub:"Estimativa, não lucro realizado",icon:CircleDollarSign}].map((m:any)=><div key={m.label} className="cps-card" style={{padding:18,border:"1px solid #2d3038",borderRadius:12,background:"#17191e"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",color:"#a2a4ad",fontSize:11}}>{m.label}<m.icon size={17} color="#f2cc46"/></div><div className="cps-value" style={{fontSize:22,fontWeight:800,marginTop:13,overflowWrap:"anywhere"}}>{m.value}</div><div style={{fontSize:10,color:"#777b86",marginTop:7}}>{m.sub}</div></div>)}</div><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:14}}><div className="cps-card" style={{padding:18,border:"1px solid #2d3038",borderRadius:12,background:"#14161b"}}><h3 style={{fontSize:14,marginTop:0}}>Estoque que precisa de atenção</h3>{(dash.products||[]).filter((x:any)=>Number(x.stock_quantity||0)<=Number(x.min_stock||0)).slice(0,8).map((x:any)=><div key={x.id} style={{display:"flex",justifyContent:"space-between",gap:12,padding:"10px 0",borderBottom:"1px solid #25272e",fontSize:11}}><span>{x.name}</span><strong style={{color:"#f0c96b"}}>{x.stock_quantity} un.</strong></div>)}{!(dash.products||[]).some((x:any)=>Number(x.stock_quantity||0)<=Number(x.min_stock||0))&&<p style={{fontSize:12,color:"#9295a0"}}>Nenhum produto abaixo do estoque mínimo informado.</p>}</div><div className="cps-card" style={{padding:18,border:"1px solid #2d3038",borderRadius:12,background:"#14161b"}}><h3 style={{fontSize:14,marginTop:0}}>Vendas recentes</h3>{(dash.sales||[]).slice(0,8).map((x:any)=><div key={x.id} style={{display:"flex",justifyContent:"space-between",gap:12,padding:"10px 0",borderBottom:"1px solid #25272e",fontSize:11}}><span>{x.channel||"Venda"} · {new Date(x.sold_at||x.created_at||Date.now()).toLocaleDateString("pt-BR")}</span><strong>{money(x.total??x.subtotal)}</strong></div>)}{!(dash.sales||[]).length&&<p style={{fontSize:12,color:"#9295a0"}}>Ainda não há vendas registradas.</p>}</div><div className="cps-card" style={{padding:18,border:"1px solid #2d3038",borderRadius:12,background:"#14161b"}}><h3 style={{fontSize:14,marginTop:0}}>Movimentações recentes</h3>{(dash.movements||[]).map((x:any)=><div key={x.id} style={{display:"flex",justifyContent:"space-between",gap:12,padding:"10px 0",borderBottom:"1px solid #25272e",fontSize:11}}><span>{x.movement_type||"Movimentação"} · {new Date(x.created_at||Date.now()).toLocaleDateString("pt-BR")}</span><strong>{x.quantity_delta??"—"}</strong></div>)}{!(dash.movements||[]).length&&<p style={{fontSize:12,color:"#9295a0"}}>Nenhuma movimentação encontrada.</p>}</div></div></div>}\n        {module !== "dashboard" && <>\n        {showForm && <form onSubmit={saveRow} style={{ marginTop: 20, padding: 18, border: "1px solid #383a42", borderRadius: 12, background: "#17191e" }}><h2 style={{ fontSize: 15, marginTop: 0 }}>Novo registro — {title}</h2>{(module === "sales" || module === "purchases") && <p style={{ color: "#d9c777", fontSize: 11 }}>A operação e o movimento de estoque são salvos juntos. Compras entram no estoque imediatamente; vendas validam saldo disponível.</p>}<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 12 }}>{fieldsFor().map(field=><label key={field.key} style={{ display: "grid", gap: 6, color: "#b8bac3", fontSize: 11 }}>{field.label}{field.key === "product_id" ? <select required value={form[field.key] || ""} onChange={e=>{const selected=lookupProducts.find(p=>p.id===e.target.value);setForm(old=>({...old,[field.key]:e.target.value,...(module==="sales"&&selected?{unit_price:String(selected.sale_price ?? 0)}:{}),...(module==="purchases"&&selected?{unit_cost:String(selected.cost_price ?? 0)}:{})}));}} style={styles.input}><option value="">Selecione um produto</option>{lookupProducts.map(p=><option key={String(p.id)} value={String(p.id)}>{String(p.name)} · estoque {String(p.stock_quantity ?? 0)}</option>)}</select> : field.key === "customer_id" || field.key === "supplier_id" ? <select value={form[field.key] || ""} onChange={e=>setForm(old=>({...old,[field.key]:e.target.value}))} style={styles.input}><option value="">Sem seleção</option>{(field.key==="customer_id"?lookupCustomers:lookupSuppliers).map(p=><option key={String(p.id)} value={String(p.id)}>{String(p.name)}</option>)}</select> : <input required={field.required} min={field.type==="number" ? "0" : undefined} step={field.type==="number" ? "0.01" : undefined} type={field.type || "text"} value={form[field.key] || ""} onChange={e=>setForm(old=>({...old,[field.key]:e.target.value}))} style={styles.input}/>}</label>)}</div><div style={{ display: "flex", gap: 8, marginTop: 15 }}><button disabled={busy} type="submit" style={styles.button}>{busy ? "Salvando…" : "Salvar registro"}</button><button type="button" onClick={()=>setShowForm(false)} style={{ ...styles.button, background: "#292b32", color: "#eee" }}>Cancelar</button></div></form>}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "22px 0 12px", flexWrap: "wrap" }}><div style={{ display: "flex", alignItems: "center", gap: 8, flex: "1 1 230px", padding: "9px 11px", background: "#17191e", border: "1px solid #30323a", borderRadius: 8, color: "#888b95" }}><Search size={15}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar registros…" style={{ flex: 1, minWidth: 0, background: "transparent", border: 0, outline: 0, color: "#f3f3f5" }}/></div><span style={{ fontSize: 11, color: "#9295a0" }}>{visibleRows.length} registro(s)</span></div>
-        <div style={{ border: "1px solid #292b32", borderRadius: 11, overflowX: "auto", background: "#14161b" }}><table style={{ borderCollapse: "collapse", width: "100%", minWidth: 620, textAlign: "left" }}><thead><tr>{columns.map(c=><th key={c} style={{ padding: 13, fontSize: 10, color: "#888b95", background: "#1b1d23", borderBottom: "1px solid #30323a" }}>{c}</th>)}<th style={{ padding: 13, fontSize: 10, color: "#888b95", background: "#1b1d23" }}>Ações</th></tr></thead><tbody>{visibleRows.map(row=><tr key={row.id}>{display(row).map((v,i)=><td key={i} style={{ padding: 13, fontSize: 11, color: "#d2d3d9", borderBottom: "1px solid #25272e" }}>{String(v ?? "—")}</td>)}<td style={{ padding: 10, borderBottom: "1px solid #25272e" }}>{["products","customers","suppliers","expenses"].includes(module)&&<button onClick={()=>void deleteRow(row.id)} style={{ border: "1px solid #55333a", borderRadius: 6, padding: "6px 8px", background: "#2b1c20", color: "#f0aab3", cursor: "pointer" }}>Excluir</button>}</td></tr>)}</tbody></table>{!busy&&visibleRows.length===0&&<div style={{ padding: 34, textAlign: "center", color: "#888b95", fontSize: 12 }}>Nenhum registro encontrado. Você pode adicionar um novo registro nos módulos disponíveis.</div>}{busy&&<div style={{ padding: 20, textAlign: "center", color: "#b8bac3", fontSize: 12 }}>Carregando…</div>}</div>
-        <p style={{ color: "#696d78", fontSize: 10, marginTop: 18, lineHeight: 1.6 }}>CPS Hub V2 · Dados protegidos por autenticação e RLS. Vendas e compras atualizam estoque em transação única. Dados de consórcio foram removidos da interface.</p>
+        {module === "dashboard" && <section className="cps-period-controls" aria-label="Período do dashboard"><strong>Período dos indicadores</strong><select value={periodPreset} onChange={event=>setPeriodPreset(event.target.value as typeof periodPreset)} aria-label="Selecionar período"><option value="7d">Últimos 7 dias</option><option value="30d">Últimos 30 dias</option><option value="month">Mês atual</option><option value="custom">Personalizado</option></select>{periodPreset==="custom"&&<><label>De <input type="date" value={customFrom} onChange={event=>setCustomFrom(event.target.value)}/></label><label>Até <input type="date" value={customTo} onChange={event=>setCustomTo(event.target.value)}/></label></>}</section>}
+        {module === "dashboard" && !dashboardComplete && <div className="cps-operations-alert" role="status"><strong>{busy ? "Conferindo os dados do painel…" : "Indicadores indisponíveis"}</strong><span>{busy ? "Aguarde a conclusão da leitura de todos os registros." : "Não foi possível validar a carga completa. Atualize o painel antes de usar os indicadores."}</span>{!busy&&<button type="button" onClick={()=>void loadRows()}>Tentar novamente</button>}</div>}{module === "dashboard" && dashboardComplete && <div className="cps-operations-strip"><div><span>Vendas líquidas no período</span><strong>{money(dashboardMetrics.salesTotals.netSales)}</strong><small>{dashboardMetrics.monthlySales.length} venda(s) ativa(s)</small></div><div><span>Despesas pagas hoje</span><strong>{money(dashboardMetrics.todayPaidExpenses)}</strong><small>Saídas confirmadas no dia</small></div><div><span>Cancelamentos hoje</span><strong>{dashboardMetrics.cancelledSalesToday.length}</strong><small>{money(dashboardMetrics.cancelledSalesTodayTotal)} em vendas canceladas</small></div><div><span>Saldo estimado de hoje</span><strong>{money(dashboardMetrics.todaySalesTotals.estimatedProfit-dashboardMetrics.todayPaidExpenses)}</strong><small>Antes de despesas gerais não registradas</small></div></div>}
+        {module === "dashboard" && dashboardComplete && (dashboardMetrics.lowStockProducts.length>0||dashboardMetrics.missingCostProducts.length>0) && <div className="cps-operations-alert" role="status"><strong>Há itens que precisam de atenção</strong><span>{dashboardMetrics.lowStockProducts.length} produto(s) no mínimo ou abaixo · {dashboardMetrics.missingCostProducts.length} com estoque sem custo cadastrado.</span><button type="button" onClick={()=>{setModule("products");setSearch("");}}>Revisar produtos</button></div>}
+        {(["sales","purchases","expenses"].includes(module))&&<div className="cps-period-controls cps-list-filters"><strong>Filtrar registros</strong><label>Status<select value={statusFilter} onChange={event=>{setStatusFilter(event.target.value);setPage(0);setSelectedRows(new Set())}}><option value="all">Todos</option>{(module==="sales"?["confirmed","pending","cancelled","refunded"]:module==="purchases"?["received","pending","cancelled"]:["pending","paid","cancelled"]).map(value=><option key={value} value={value}>{value==="confirmed"?"Confirmada":value==="received"?"Recebida":value==="pending"?"Pendente":value==="paid"?"Paga":value==="cancelled"?"Cancelada":"Estornada"}</option>)}</select></label>{module==="sales"&&<label>Canal<select value={channelFilter} onChange={event=>{setChannelFilter(event.target.value);setPage(0);setSelectedRows(new Set())}}><option value="all">Todos os canais</option>{["Manual","Facebook Marketplace","WhatsApp","Instagram","OLX","Mercado Livre","Grupos locais","Revendedor"].map(channel=><option key={channel} value={channel}>{channel}</option>)}</select></label>}</div>}
+        {module === "dashboard" && dashboardComplete && <div style={{marginTop:24,display:"grid",gap:18}}><div className="cps-panel cps-hero" style={{padding:24,border:"1px solid #393522",borderRadius:16,background:"radial-gradient(circle at top right,#332b13,#17191e 60%)"}}><div style={{color:"#f2cc46",fontSize:10,fontWeight:800,letterSpacing:2}}>VISÃO EXECUTIVA · CPS STORE</div><h2 style={{fontSize:24,margin:"10px 0 6px"}}>Sua operação em um só lugar</h2><p style={{color:"#a2a4ad",fontSize:12,margin:0}}>Indicadores do ambiente de testes. Valores dependem dos registros existentes e do período filtrado.</p><div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:18}}><button type="button" className="cps-button cps-button--primary" onClick={()=>{setModule("sales");setShowForm(false);}} style={styles.button}><ShoppingBag size={15}/> Registrar venda</button><button type="button" className="cps-button" onClick={()=>{setModule("products");setShowForm(false);}} style={{...styles.button,background:"#292b32",color:"#eee"}}><Package size={15}/> Ver estoque</button></div></div><div className="cps-stagger" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:12}}>{[{label:"Vendas no período",value:money(dashboardMetrics.salesTotals.netSales),sub:`${dashboardMetrics.monthlySales.length} registro(s) · líquido após descontos`,icon:ShoppingBag},{label:"Compras no período",value:money(dashboardMetrics.monthlyPurchaseTotal),sub:`${dashboardMetrics.monthlyPurchases.length} registro(s) não cancelado(s)`,icon:Boxes},{label:"Despesas no período",value:money(dashboardMetrics.monthlyExpenseTotal),sub:`${dashboardMetrics.monthlyExpenses.length} registro(s) não cancelado(s)`,icon:Wallet},{label:"Clientes cadastrados",value:String(dash.customers.length),sub:"Registros consultados",icon:Users},{label:"Valor do estoque (custo)",value:money(dashboardMetrics.inventoryCost),sub:`${dash.products.length} produto(s) ativo(s)`,icon:Package},{label:"Margem potencial em estoque",value:money(dashboardMetrics.potentialInventoryMargin),sub:dashboardMetrics.missingCostProducts.length?"Parcial; exclui itens sem custo":"Estimativa; não lucro realizado",icon:CircleDollarSign}, {label:"Lucro bruto estimado no período",value:money(dashboardMetrics.salesTotals.estimatedProfit),sub:dashboardMetrics.costBasisComplete ? "Após custo, descontos, taxas e frete; antes das despesas gerais" : "Estimativa parcial: existem itens sem custo unitário válido",icon:CircleDollarSign}].map(m=><div key={m.label} className="cps-card" style={{padding:18,border:"1px solid #2d3038",borderRadius:12,background:"#17191e"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",color:"#a2a4ad",fontSize:11}}>{m.label}<m.icon size={17} color="#f2cc46"/></div><div className="cps-value" style={{fontSize:22,fontWeight:800,marginTop:13,overflowWrap:"anywhere"}}>{m.value}</div><div style={{fontSize:10,color:"#777b86",marginTop:7}}>{m.sub}</div></div>)}</div><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:14}}><div className="cps-card" style={{padding:18,border:"1px solid #2d3038",borderRadius:12,background:"#14161b"}}><h3 style={{fontSize:14,marginTop:0}}>Estoque que precisa de atenção</h3>{dashboardMetrics.lowStockProducts.slice(0,8).map(x=><div key={x.id} style={{display:"flex",justifyContent:"space-between",gap:12,padding:"10px 0",borderBottom:"1px solid #25272e",fontSize:11}}><span>{x.name}</span><strong style={{color:"#f0c96b"}}>{x.stock_quantity} un.</strong></div>)}{dashboardMetrics.lowStockProducts.length === 0&&<p style={{fontSize:12,color:"#9295a0"}}>Nenhum produto abaixo do estoque mínimo informado.</p>}</div><div className="cps-card" style={{padding:18,border:"1px solid #2d3038",borderRadius:12,background:"#14161b"}}><h3 style={{fontSize:14,marginTop:0}}>Vendas recentes</h3>{dashboardMetrics.sales.slice(0,8).map(x=><div key={x.id} style={{display:"flex",justifyContent:"space-between",gap:12,padding:"10px 0",borderBottom:"1px solid #25272e",fontSize:11}}><span>{x.channel||"Venda"} · {new Date(x.sold_at||x.created_at||Date.now()).toLocaleDateString("pt-BR")}</span><strong>{money(getNetSaleAmount(x))}</strong></div>)}{!dashboardMetrics.sales.length&&<p style={{fontSize:12,color:"#9295a0"}}>Ainda não há vendas registradas.</p>}</div><div className="cps-card" style={{padding:18,border:"1px solid #2d3038",borderRadius:12,background:"#14161b"}}><h3 style={{fontSize:14,marginTop:0}}>Movimentações recentes</h3>{(dash.movements||[]).map(x=><div key={x.id} style={{display:"flex",justifyContent:"space-between",gap:12,padding:"10px 0",borderBottom:"1px solid #25272e",fontSize:11}}><span>{x.movement_type||"Movimentação"} · {new Date(x.created_at||Date.now()).toLocaleDateString("pt-BR")}</span><strong>{x.quantity_delta??"—"}</strong></div>)}{!dash.movements.length&&<p style={{fontSize:12,color:"#9295a0"}}>Nenhuma movimentação encontrada.</p>}</div></div><div className="cps-card" style={{padding:18,border:"1px solid #2d3038",borderRadius:12,background:"#14161b"}}><h3 style={{fontSize:14,marginTop:0}}>Fechamento de hoje</h3><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}}><div><div style={{fontSize:10,color:"#9295a0"}}>Vendas líquidas</div><strong>{money(dashboardMetrics.todaySalesTotals.netSales)}</strong></div><div><div style={{fontSize:10,color:"#9295a0"}}>Despesas pagas</div><strong>{money(dashboardMetrics.todayPaidExpenses)}</strong></div><div><div style={{fontSize:10,color:"#9295a0"}}>Despesas vencendo hoje</div><strong>{money(dashboardMetrics.todayPendingExpenses)}</strong></div><div><div style={{fontSize:10,color:"#9295a0"}}>Resultado estimado após despesas pagas</div><strong>{money(dashboardMetrics.todaySalesTotals.estimatedProfit-dashboardMetrics.todayPaidExpenses)}</strong></div></div><p style={{fontSize:10,color:"#9295a0",marginBottom:0}}>Estimativa baseada nos registros atuais; não substitui conciliação bancária e pode ser parcial se houver itens sem custo.</p></div><div className="cps-card" style={{padding:18,border:"1px solid #2d3038",borderRadius:12,background:"#14161b"}}><h3 style={{fontSize:14,marginTop:0}}>Vendas por canal no período</h3>{Object.entries(dashboardMetrics.channelTotals).sort((a,b)=>b[1].netSales-a[1].netSales).map(([channel,totals])=><div key={channel} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,padding:"10px 0",borderBottom:"1px solid #25272e",fontSize:11}}><div><strong>{channel}</strong><div style={{color:"#9295a0",marginTop:4}}>{totals.count} venda(s) · resultado bruto estimado {money(totals.estimatedProfit)}</div></div><strong>{money(totals.netSales)}</strong></div>)}{!Object.keys(dashboardMetrics.channelTotals).length&&<p style={{fontSize:12,color:"#9295a0"}}>Não há vendas ativas no período para comparar canais.</p>}</div></div>}\n        {module !== "dashboard" && <>\n        {showForm && <form onSubmit={saveRow} style={{ marginTop: 20, padding: 18, border: "1px solid #383a42", borderRadius: 12, background: "#17191e" }}><h2 style={{ fontSize: 15, marginTop: 0 }}>Novo registro — {title}</h2>{(module === "sales" || module === "purchases") && <p style={{ color: "#d9c777", fontSize: 11 }}>A operação e o movimento de estoque são salvos juntos. Compras entram no estoque imediatamente; vendas validam saldo disponível.</p>}<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 12 }}>{module === "sales" && <SaleCartEditor products={cartProducts} items={saleItems} onChange={setSaleItems} disabled={busy} />}{fieldsFor().map(field=><div key={field.key} style={{ display: "grid", gap: 6, color: "#b8bac3", fontSize: 11 }}><span>{field.label}</span>{field.key === "product_id" ? <select aria-label={field.label} required value={form[field.key] || ""} onChange={e=>{const selected=lookupProducts.find(p=>p.id===e.target.value);setForm(old=>({...old,[field.key]:e.target.value,...(module==="sales"&&selected?{unit_price:String(selected.sale_price ?? 0)}:{}),...(module==="purchases"&&selected?{unit_cost:String(selected.cost_price ?? 0)}:{})}));}} style={styles.input}><option value="">Selecione um produto</option>{lookupProducts.map(p=><option key={String(p.id)} value={String(p.id)}>{String(p.name)} · estoque {String(p.stock_quantity ?? 0)}</option>)}</select> : field.key === "customer_id" || field.key === "supplier_id" ? <select aria-label={field.label} value={form[field.key] || ""} onChange={e=>setForm(old=>({...old,[field.key]:e.target.value}))} style={styles.input}><option value="">Sem seleção</option>{(field.key==="customer_id"?lookupCustomers:lookupSuppliers).map(p=><option key={String(p.id)} value={String(p.id)}>{String(p.name)}</option>)}</select> : <input aria-label={field.label} required={field.required} min={field.type==="number" ? "0" : undefined} step={field.type==="number" ? (["quantity","stock_quantity","min_stock"].includes(field.key) ? "1" : "0.01") : undefined} type={field.type || "text"} value={form[field.key] || ""} onChange={e=>setForm(old=>({...old,[field.key]:e.target.value}))} style={styles.input}/>}</div>)}</div><div style={{ display: "flex", gap: 8, marginTop: 15 }}><button disabled={busy} type="submit" style={styles.button}>{busy ? "Salvando…" : "Salvar registro"}</button><button type="button" onClick={()=>setShowForm(false)} style={{ ...styles.button, background: "#292b32", color: "#eee" }}>Cancelar</button></div></form>}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "22px 0 12px", flexWrap: "wrap" }}><div style={{ display: "flex", alignItems: "center", gap: 8, flex: "1 1 230px", padding: "9px 11px", background: "#17191e", border: "1px solid #30323a", borderRadius: 8, color: "#888b95" }}><Search size={15}/><input value={search} onChange={e=>{setSearch(e.target.value);setSelectedRows(new Set())}} placeholder="Buscar registros…" style={{ flex: 1, minWidth: 0, background: "transparent", border: 0, outline: 0, color: "#f3f3f5" }}/></div><span style={{ fontSize: 11, color: "#9295a0" }}>{visibleRows.length} registro(s)</span></div>
+        {selectedRows.size>0&&<div className="cps-selection-bar" role="status"><strong>{selectedRows.size} registro(s) selecionado(s)</strong><span>Ação em lote disponível: exportar os selecionados.</span><button type="button" onClick={exportCsv}>Exportar selecionados</button><button type="button" onClick={()=>setSelectedRows(new Set())}>Limpar seleção</button></div>}
+        <div style={{ border: "1px solid #292b32", borderRadius: 11, overflowX: "auto", background: "#14161b" }}><table style={{ borderCollapse: "collapse", width: "100%", minWidth: 660, textAlign: "left" }}><thead><tr><th style={{padding:10,background:"#1b1d23"}}><input type="checkbox" aria-label="Selecionar registros visíveis" checked={visibleRows.length>0&&visibleRows.every(row=>selectedRows.has(row.id))} onChange={event=>setSelectedRows(previous=>{const next=new Set(previous);visibleRows.forEach(row=>{if(event.target.checked){next.add(row.id)}else{next.delete(row.id)}});return next})}/></th>{columns.map(c=><th key={c} style={{ padding: 13, fontSize: 10, color: "#888b95", background: "#1b1d23", borderBottom: "1px solid #30323a" }}>{c}</th>)}<th style={{ padding: 13, fontSize: 10, color: "#888b95", background: "#1b1d23" }}>Ações</th></tr></thead><tbody>{visibleRows.map(row=><tr key={row.id}><td style={{padding:10,borderBottom:"1px solid #25272e"}}><input type="checkbox" aria-label={`Selecionar ${String(row.name||row.order_number||row.id)}`} checked={selectedRows.has(row.id)} onChange={event=>setSelectedRows(previous=>{const next=new Set(previous);if(event.target.checked){next.add(row.id)}else{next.delete(row.id)};return next})}/></td>{display(row).map((v,i)=><td key={columns[i]} style={{ padding: 13, fontSize: 11, color: "#d2d3d9", borderBottom: "1px solid #25272e" }}>{String(v ?? "—")}</td>)}<td style={{ padding: 10, borderBottom: "1px solid #25272e", whiteSpace:"nowrap" }}>{module==="products"&&<button type="button" onClick={()=>void openProductDetails(row)} style={{border:"1px solid #39445a",borderRadius:6,padding:"6px 8px",background:"#1c2432",color:"#c9d6ee",cursor:"pointer",marginRight:6}}>Detalhes</button>}{["products","customers","suppliers","expenses","sales","purchases"].includes(module)&&<button type="button" disabled={busy || (module==="sales"&&["cancelled","refunded"].includes(String(row.status||""))) || (module==="purchases"&&row.status==="cancelled")} onClick={()=>void deleteRow(row.id)} style={{ border: "1px solid #55333a", borderRadius: 6, padding: "6px 8px", background: "#2b1c20", color: "#f0aab3", cursor: "pointer" }}>{module==="products"?"Desativar":module==="expenses"||module==="sales"||module==="purchases"?"Cancelar":"Excluir"}</button>}</td></tr>)}</tbody></table>{!busy&&visibleRows.length===0&&<div style={{ padding: 34, textAlign: "center", color: "#888b95", fontSize: 12 }}>Nenhum registro encontrado. Você pode adicionar um novo registro nos módulos disponíveis.</div>}{busy&&<div style={{ padding: 20, textAlign: "center", color: "#b8bac3", fontSize: 12 }}>Carregando…</div>}</div>
+        {!['v1_archive','conversations','history','dashboard'].includes(module)&&rowCount>50&&<div className="cps-pagination"><span>{page*50+1}–{Math.min((page+1)*50,rowCount)} de {rowCount}</span><button type="button" disabled={page===0||busy} onClick={()=>{setSelectedRows(new Set());setPage(value=>Math.max(0,value-1))}}>Anterior</button><button type="button" disabled={(page+1)*50>=rowCount||busy} onClick={()=>{setSelectedRows(new Set());setPage(value=>value+1)}}>Próxima</button></div>}
+        <p style={{ color: "#696d78", fontSize: 10, marginTop: 18, lineHeight: 1.6 }}>CPS Hub V2 · Dados protegidos por autenticação e RLS. Vendas e compras atualizam estoque em transação única. CPS STORE e Apple Royal usam o mesmo acesso, com operações separadas.</p>
         </>}
       </section>
     </div>
+    {selectedProduct&&<div className="cps-detail-overlay" role="presentation"><section className="cps-product-detail" role="dialog" aria-modal="true" aria-labelledby="cps-product-detail-title"><div className="cps-detail-head"><div><span>FICHA DO PRODUTO</span><h2 id="cps-product-detail-title">{String(selectedProduct.name||"Produto")}</h2><p>{String(selectedProduct.sku||"Sem SKU")} · {String(selectedProduct.category||"Sem categoria")}</p></div><button type="button" onClick={()=>setSelectedProduct(null)}>Fechar</button></div><div className="cps-product-summary"><div><span>Estoque atual</span><strong>{String(selectedProduct.stock_quantity??0)} un.</strong></div><div><span>Custo unitário</span><strong>{money(selectedProduct.cost_price)}</strong></div><div><span>Preço de venda</span><strong>{money(selectedProduct.sale_price)}</strong></div><div><span>Estoque a custo</span><strong>{money(Number(selectedProduct.stock_quantity||0)*Number(selectedProduct.cost_price||0))}</strong></div></div><div className="cps-detail-heading"><h3>Movimentações recentes</h3><span>Últimas 30 · histórico original preservado</span></div><div className="cps-movement-list">{productMovementsBusy?<p>Carregando movimentações…</p>:productMovements.length?productMovements.map(movement=><article key={movement.id}><div><strong>{String(movement.movement_type||"Movimento")}</strong><span>{String(movement.reference_type||"Ajuste")}{movement.notes?" · "+String(movement.notes):""}</span></div><b className={Number(movement.quantity_delta)<0?"is-negative":"is-positive"}>{Number(movement.quantity_delta)>0?"+":""}{String(movement.quantity_delta)}</b><time>{movement.created_at?new Date(String(movement.created_at)).toLocaleString("pt-BR"):"—"}</time></article>):<p>Nenhuma movimentação registrada para este produto.</p>}</div></section></div>}
   </main>;
 }

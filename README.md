@@ -1,35 +1,43 @@
-# CPS Hub V2 — aplicação independente
+# CPS Hub V2 — CRM das operações CPS
 
-Aplicação em Next.js com TypeScript, React, CSS próprio e Supabase para autenticação/dados. O ambiente V2 utiliza um projeto de teste isolado do sistema antigo.
+Aplicação Next.js com TypeScript, React, CSS próprio e Supabase. CPS Store e Apple Royal compartilham a autenticação e navegação, mantendo seus fluxos financeiros separados.
 
 ## Rodar localmente
-Requisitos: Node.js 22 ou superior.
+
+Requisitos: Node.js 22.6 ou superior e pnpm 11.25.0.
+
 ```bash
-npm install
-npm run dev
+pnpm install --frozen-lockfile
+pnpm dev
 ```
-Abra http://localhost:3000.
 
-## Módulos atuais
-- CPS Store: produtos, clientes, fornecedores, vendas, compras, movimentações, despesas e arquivo histórico V1.
-- Apple Royal: catálogo de aparelhos, reservas, vendas, repasses, entregas, garantia/pós-venda, relatórios resumidos e documentos.
-- Autenticação Supabase e dados isolados por proprietário via RLS.
-- Navegação separada entre CPS Store e Apple Royal.
+Para validar antes de enviar alterações, rode `pnpm test`, `pnpm lint`, `pnpm exec tsc --noEmit` e `pnpm build`.
 
-## Publicação
-GitHub Actions compila a exportação estática Next.js e publica a pasta `out` no GitHub Pages. Build verde não substitui testes funcionais no navegador.
+Configure as variáveis de ambiente usando `.env.example` como referência. Use somente o Supabase de teste autorizado. Nunca coloque service-role keys no navegador.
 
-## Dados e segurança
-- O banco V2 é separado do projeto antigo inativo.
-- O arquivo V1 preserva dados históricos; não reaplicar movimentações antigas ao saldo.
-- Não incluir service-role keys no frontend.
-- A chave publishable é pública por desenho; RLS é obrigatória.
-- Vendas/compras da CPS Store usam RPCs transacionais. Reservas/vendas Apple Royal usam RPCs transacionais após a migration 202610130007.
+## Módulos
 
-## Limitações conhecidas
-- Testes automatizados de ponta a ponta ainda não estão configurados.
-- Apple Royal ainda precisa de edição controlada, fluxo completo de recebimentos/conciliação e relatórios detalhados.
-- `package-lock.json` ainda não está versionado.
-- A proteção de senha vazada do Supabase Auth precisa ser habilitada.
+- **Visão geral e CPS Store:** produtos, clientes, fornecedores, vendas, compras, estoque, despesas, movimentações, importações históricas e métricas financeiras.
+- **Apple Royal:** aparelhos, reservas, vendas vinculadas ou expressas, recebimentos, repasses, entregas, pós-venda, documentos e conciliação.
+- O módulo de Consórcios foi retirado da interface a pedido do usuário. Leads, atividades e migrações já existentes permanecem preservados no Supabase; nenhum dado foi apagado.
+- Navegação responsiva entre CPS Store e Apple Royal; dados por proprietário protegidos com RLS.
 
-Consulte [AUDIT-2026-10-13.md](./AUDIT-2026-10-13.md) e [DEPLOYMENT.md](./DEPLOYMENT.md) para status e validações pendentes.
+## Integridade e segurança
+
+- O Supabase de teste autorizado é `abxmblwgsuiayfhkwzvu`. O projeto antigo `ybvwhejfwxtlsmvtnoua` não deve ser alterado.
+- Vendas, compras, estoque e fluxos financeiros Apple Royal usam operações transacionais quando disponíveis; cancelamentos preservam registros originais e registram reversões.
+- O arquivo V1 preserva dados históricos; não reaplicar movimentações antigas ao saldo atual.
+- A chave publishable é destinada ao cliente; RLS e funções `SECURITY INVOKER` devem permanecer restritas.
+- Dependências são fixadas em `pnpm-lock.yaml`; CI instala com `--frozen-lockfile`.
+
+## Validação e limites atuais
+
+- Em 2026-10-15, 11 testes automatizados, Biome lint, `tsc --noEmit`, build estático das rotas `/` e `/apple-royal` e `git diff --check` passaram.
+- A prévia local responde em `http://127.0.0.1:4175/` enquanto o servidor e o Codex permanecerem abertos. A revisão autenticada conferiu dashboard e troca de módulos em 1.350 px e 304 px; as duas rotas não estouraram a largura móvel. O formulário de venda expressa foi conferido em 304 px e fechado sem gravar dados.
+- A comparação mais recente consultou somente IDs técnicos do Base44: os 870 IDs atuais correspondem ao arquivo V1 do Supabase, sem faltantes ou extras. A verificação anterior também confirmou payloads idênticos para os 22 registros arquivados com autorização e nenhuma alteração nas tabelas operacionais.
+- Ainda faltam teste de isolamento com uma segunda conta real e validação de backup/restauração. A revisão visual autenticada dos dois módulos foi concluída nesta sessão.
+- O Security Advisor do Supabase de teste alerta que a proteção contra senhas vazadas está desativada; essa configuração exige revisão no painel.
+- O histórico de migrações ainda precisa ser reconciliado: o Supabase registra 28 versões, enquanto a pasta local tem 21 arquivos com versões divergentes. Não rode `supabase db push` até alinhar e verificar esse histórico.
+- O GitHub Pages publica a interface estática no ambiente Supabase de testes autorizado; o workflow não aplica migrações no banco. Não use dados reais até configurar e validar um projeto de produção autorizado.
+
+Consulte [REBUILD-PLAN.md](./REBUILD-PLAN.md), [AUDIT-2026-10-13.md](./AUDIT-2026-10-13.md) e [DEPLOYMENT.md](./DEPLOYMENT.md) para detalhes.
