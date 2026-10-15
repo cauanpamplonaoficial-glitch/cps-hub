@@ -1,4 +1,3 @@
-Attempting to perform the InitializeDefaultDrives operation on the 'FileSystem' provider failed.
 begin;
 
 -- Anonymous clients have no row policies in the exposed schema and need no table privileges.
