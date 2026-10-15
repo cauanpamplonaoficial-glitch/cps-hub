@@ -1,4 +1,3 @@
-Attempting to perform the InitializeDefaultDrives operation on the 'FileSystem' provider failed.
 # CPS Hub V2 — CRM das operações CPS
 
 Aplicação Next.js com TypeScript, React, CSS próprio e Supabase. CPS Store e Apple Royal compartilham a autenticação e navegação, mantendo seus fluxos financeiros separados.
