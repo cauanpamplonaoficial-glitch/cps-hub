@@ -1,4 +1,3 @@
-Attempting to perform the InitializeDefaultDrives operation on the 'FileSystem' provider failed.
 # CPS Hub — plano de reconstrução
 
 ## Objetivo
