@@ -1,5 +1,6 @@
 export type DashboardSale = {
   id: string;
+  total?: number | string | null;
   status?: string | null;
   channel?: string | null;
   subtotal?: number | string | null;
@@ -37,15 +38,68 @@ export type DashboardProduct = {
   sale_price?: number | string | null;
 };
 
+export type CustomerHistorySale = {
+  customer_id?: string | null;
+  subtotal?: number | string | null;
+  discount?: number | string | null;
+  status?: string | null;
+  sold_at?: string | null;
+  created_at?: string | null;
+};
+
+export type CustomerPurchaseSummary = {
+  count: number;
+  total: number;
+  lastPurchase: string | null;
+};
+
 const amount = (value: unknown): number => {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+// Keep currency arithmetic in integer cents; convert back only for the UI/API.
+const cents = (value: unknown): number => Math.round(amount(value) * 100);
+const fromCents = (value: number): number => value / 100;
+
+const netSaleCents = (sale: Pick<DashboardSale, "subtotal" | "discount">): number =>
+  Math.max(0, cents(sale.subtotal) - cents(sale.discount));
+
+export const getNetSaleAmount = (sale: Pick<DashboardSale, "subtotal" | "discount">): number =>
+  fromCents(netSaleCents(sale));
+
 const isCancelled = (status?: string | null) =>
   ["cancelled", "canceled", "refunded", "returned", "void"].includes(
     String(status ?? "").trim().toLowerCase(),
   );
+
+export const summarizeCustomerPurchases = (
+  sales: readonly CustomerHistorySale[],
+): Map<string, CustomerPurchaseSummary> => {
+  const totals = new Map<string, { count: number; totalCents: number; lastPurchase: string | null }>();
+
+  for (const sale of sales) {
+    if (isCancelled(sale.status) || !sale.customer_id) continue;
+
+    const current = totals.get(sale.customer_id) ?? { count: 0, totalCents: 0, lastPurchase: null };
+    const saleDate = sale.sold_at || sale.created_at || null;
+    const saleDateTime = saleDate ? new Date(saleDate).getTime() : Number.NaN;
+    const lastDateTime = current.lastPurchase ? new Date(current.lastPurchase).getTime() : Number.NaN;
+
+    current.count += 1;
+    current.totalCents += Math.max(0, cents(sale.subtotal) - cents(sale.discount));
+    if (saleDate && !Number.isNaN(saleDateTime) && (Number.isNaN(lastDateTime) || saleDateTime > lastDateTime)) {
+      current.lastPurchase = saleDate;
+    }
+    totals.set(sale.customer_id, current);
+  }
+
+  return new Map([...totals].map(([customerId, summary]) => [customerId, {
+    count: summary.count,
+    total: fromCents(summary.totalCents),
+    lastPurchase: summary.lastPurchase,
+  }]));
+};
 
 export const isInMonth = (
   value: string | null | undefined,
@@ -90,29 +144,35 @@ export const getDashboardMetrics = (data: {
   const monthlyExpenses = expenses.filter((expense) => isInPeriod(expense.due_date, expense.created_at));
 
   const calculateSaleTotals = (saleRows: DashboardSale[]) =>
-    saleRows.reduce(
-      (totals, sale) => {
-        const subtotal = amount(sale.subtotal);
-        const discount = amount(sale.discount);
-        const fees = amount(sale.fees);
-        const shipping = amount(sale.shipping_cost);
-        const costOfGoods = (sale.sale_items ?? []).reduce(
-          (sum, item) => sum + amount(item.quantity) * amount(item.unit_cost),
-          0,
-        );
+    (() => {
+      const totals = saleRows.reduce(
+        (result, sale) => {
+          const subtotal = cents(sale.subtotal);
+          const discount = cents(sale.discount);
+          const fees = cents(sale.fees);
+          const shipping = cents(sale.shipping_cost);
+          const costOfGoods = (sale.sale_items ?? []).reduce(
+            (sum, item) => sum + Math.round(amount(item.quantity) * cents(item.unit_cost)),
+            0,
+          );
+          const netSales = netSaleCents(sale);
 
-        totals.grossSales += subtotal;
-        totals.discounts += discount;
-        const netSales = Math.max(0, subtotal - discount);
-        totals.netSales += netSales;
-        totals.fees += fees;
-        totals.shipping += shipping;
-        totals.costOfGoods += costOfGoods;
-        totals.estimatedProfit += netSales - fees - shipping - costOfGoods;
-        return totals;
-      },
-      { grossSales: 0, discounts: 0, netSales: 0, fees: 0, shipping: 0, costOfGoods: 0, estimatedProfit: 0 },
-    );
+          result.grossSales += subtotal;
+          result.discounts += discount;
+          result.netSales += netSales;
+          result.fees += fees;
+          result.shipping += shipping;
+          result.costOfGoods += costOfGoods;
+          result.estimatedProfit += netSales - fees - shipping - costOfGoods;
+          return result;
+        },
+        { grossSales: 0, discounts: 0, netSales: 0, fees: 0, shipping: 0, costOfGoods: 0, estimatedProfit: 0 },
+      );
+
+      return Object.fromEntries(
+        Object.entries(totals).map(([key, value]) => [key, fromCents(value)]),
+      ) as typeof totals;
+    })();
 
   const today = new Date();
   const isToday = (value: string | null | undefined) => {
@@ -130,41 +190,48 @@ export const getDashboardMetrics = (data: {
   const todaySalesTotals = calculateSaleTotals(todaySales);
   const todayPaidExpenses = expenses
     .filter((expense) => String(expense.status || "").toLowerCase() === "paid" && isToday(expense.paid_at))
-    .reduce((sum, expense) => sum + amount(expense.amount), 0);
+    .reduce((sum, expense) => sum + cents(expense.amount), 0);
   const todayPendingExpenses = expenses
     .filter((expense) => !["paid", "cancelled", "canceled"].includes(String(expense.status || "").toLowerCase()) && isToday(expense.due_date))
-    .reduce((sum, expense) => sum + amount(expense.amount), 0);
+    .reduce((sum, expense) => sum + cents(expense.amount), 0);
   const cancelledSales = data.sales.filter((sale) => isCancelled(sale.status));
   const cancelledSalesToday = cancelledSales.filter((sale) => isToday(sale.sold_at || sale.created_at));
-  const cancelledSalesTodayTotal = cancelledSalesToday.reduce((sum, sale) => sum + amount(sale.subtotal), 0);
+  const cancelledSalesTodayTotal = fromCents(cancelledSalesToday.reduce((sum, sale) => sum + cents(sale.subtotal), 0));
   const missingCostProducts = data.products.filter((product) => amount(product.stock_quantity) > 0 && amount(product.cost_price) <= 0);
 
   const salesTotals = calculateSaleTotals(monthlySales);
   const inventoryCost = data.products.reduce(
-    (sum, product) => sum + amount(product.stock_quantity) * amount(product.cost_price),
+    (sum, product) => sum + Math.round(amount(product.stock_quantity) * cents(product.cost_price)),
     0,
   );
   const potentialInventoryMargin = data.products.reduce(
-    (sum, product) => sum + amount(product.stock_quantity) * (amount(product.sale_price) - amount(product.cost_price)),
+    (sum, product) => amount(product.cost_price) > 0
+      ? sum + Math.round(amount(product.stock_quantity) * (cents(product.sale_price) - cents(product.cost_price)))
+      : sum,
     0,
   );
   const lowStockProducts = data.products.filter(
     (product) => amount(product.stock_quantity) <= amount(product.min_stock),
   );
 
-  const channelTotals = monthlySales.reduce<Record<string, { count: number; netSales: number; estimatedProfit: number }>>(
+  const channelTotalsInCents = monthlySales.reduce<Record<string, { count: number; netSales: number; estimatedProfit: number }>>(
     (result, sale) => {
       const channel = String(sale.channel || "Manual");
       const totals = result[channel] ?? { count: 0, netSales: 0, estimatedProfit: 0 };
       const saleTotals = calculateSaleTotals([sale]);
       totals.count += 1;
-      totals.netSales += saleTotals.netSales;
-      totals.estimatedProfit += saleTotals.estimatedProfit;
+      totals.netSales += cents(saleTotals.netSales);
+      totals.estimatedProfit += cents(saleTotals.estimatedProfit);
       result[channel] = totals;
       return result;
     },
     {},
   );
+  const channelTotals = Object.fromEntries(Object.entries(channelTotalsInCents).map(([channel, totals]) => [channel, {
+    count: totals.count,
+    netSales: fromCents(totals.netSales),
+    estimatedProfit: fromCents(totals.estimatedProfit),
+  }]));
 
   return {
     sales,
@@ -175,17 +242,17 @@ export const getDashboardMetrics = (data: {
     monthlyExpenses,
     salesTotals,
     todaySalesTotals,
-    todayPaidExpenses,
-    todayPendingExpenses,
+    todayPaidExpenses: fromCents(todayPaidExpenses),
+    todayPendingExpenses: fromCents(todayPendingExpenses),
     cancelledSalesToday,
     cancelledSalesTodayTotal,
     missingCostProducts,
-    inventoryCost,
-    potentialInventoryMargin,
+    inventoryCost: fromCents(inventoryCost),
+    potentialInventoryMargin: fromCents(potentialInventoryMargin),
     lowStockProducts,
     channelTotals,
-    monthlyExpenseTotal: monthlyExpenses.reduce((sum, expense) => sum + amount(expense.amount), 0),
-    monthlyPurchaseTotal: monthlyPurchases.reduce((sum, purchase) => sum + amount(purchase.total), 0),
+    monthlyExpenseTotal: fromCents(monthlyExpenses.reduce((sum, expense) => sum + cents(expense.amount), 0)),
+    monthlyPurchaseTotal: fromCents(monthlyPurchases.reduce((sum, purchase) => sum + cents(purchase.total), 0)),
     costBasisComplete: monthlySales.every((sale) => Boolean(sale.sale_items?.length) && sale.sale_items!.every((item) => amount(item.unit_cost) > 0)),
     customersCount: data.customers.length,
   };
